@@ -1,0 +1,8 @@
+.ssh = "$env:USERPROFILE\.ssh\"
+id_ecdsa_2024-04-17
+2013_id_rsa
+Bastion as mark.cross#ezPR#mark.cross#id_ecdsa_2024-04-17
+JumpBox#192.168.165.10#mark#id_ecdsa_2024-04-17
+PRIMARY Bastion#ezPR#mark#id_ecdsa_2024-04-17
+SECONDARY Bastion#ezSEC#mark#id_ecdsa_2024-04-17
+bluebottle#bluebottle#mark#id_ecdsa_2024-04-17
