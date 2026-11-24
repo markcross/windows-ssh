@@ -217,8 +217,8 @@ Enter the number of your choice: 6e
   Key      [id_ecdsa_btop_2024-04-17]:
   Folder   [/home/cane/bin]: /home/cane/logs
 
-  Old: cainsight#mdsp#cainsight#id_ecdsa_btop_2024-04-17#/home/cane/bin
-  New: cainsight#mdsp#cainsight#id_ecdsa_btop_2024-04-17#/home/cane/logs
+  Old: cane#mdo#cainsight#id_ecdsa_btop_2024-04-17#/home/cane/bin
+  New: cane#mdp#cainsight#id_ecdsa_btop_2024-04-17#/home/cane/logs
 
 Save? (y/N): y
 ```
