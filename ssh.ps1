@@ -513,6 +513,11 @@ function New-KeyPair {
     if (Confirm-YesNo "Load it into ssh-agent now? (y/N)") {
         & ssh-add $path
     }
+    if (Confirm-YesNo "Install it on one of your menu hosts now? (y/N)") {
+        $newKey = @{ Name = $name; Private = $path; Public = "$path.pub"; HasPrivate = $true; HasPublic = $true }
+        Install-KeyOnChosenHost $newKey
+        return
+    }
     Write-Host "`nPress Enter to continue..."
     [void](Read-Host)
     Set-Status "✅ Created $name." Green
@@ -579,6 +584,130 @@ function Remove-Key {
     Set-Status "✅ Deleted $($key.Name) (moved to $bin)." Green
 }
 
+# --- Install a public key on a host ---
+# Main menu <n>i (pick a key), key window <n>i (pick a host), or after ka.
+
+function Select-FromList {
+    param($title, $labels)
+    Write-Host "`n$title" -ForegroundColor Cyan
+    for ($i = 0; $i -lt $labels.Count; $i++) { Write-Host ("  [{0}] {1}" -f $i, $labels[$i]) }
+    while ($true) {
+        $answer = (Read-Host "`nNumber (Enter to cancel)").Trim()
+        if ($answer -eq "") { return -1 }
+        if ($answer -match '^\d+$' -and [int]$answer -lt $labels.Count) { return [int]$answer }
+        Write-Host "    ❌ Enter 0 to $($labels.Count - 1)." -ForegroundColor Red
+    }
+}
+
+function Get-HostLabel {
+    param($e)
+    return ("{0}@{1} ({2}) [key: {3}]" -f $e.Username, $e.Host, $e.Alias, $e.Keyname)
+}
+
+# Run on the server, with the public key line on stdin: strip Windows CRs,
+# make sure authorized_keys ends with a newline, then append the key only if
+# that exact line isn't already there. Then fix SELinux labels if the server
+# uses SELinux (as ssh-copy-id does). No double quotes, so it survives
+# Windows PowerShell's argument passing to ssh.exe.
+$InstallKeyCommand = 'umask 077; mkdir -p ~/.ssh && tr -d ''\r'' > ~/.ssh/.ssh-ps1-newkey && touch ~/.ssh/authorized_keys && ' +
+    'if [ -s ~/.ssh/authorized_keys ] && [ $(tail -c1 ~/.ssh/authorized_keys | wc -l) -eq 0 ]; then echo >> ~/.ssh/authorized_keys; fi; ' +
+    'if grep -qxFf ~/.ssh/.ssh-ps1-newkey ~/.ssh/authorized_keys; then echo SSHPS1-ALREADY; ' +
+    'else cat ~/.ssh/.ssh-ps1-newkey >> ~/.ssh/authorized_keys && echo SSHPS1-ADDED; fi; rm -f ~/.ssh/.ssh-ps1-newkey; ' +
+    'if command -v restorecon >/dev/null 2>&1; then restorecon -F ~/.ssh ~/.ssh/authorized_keys >/dev/null 2>&1; fi'
+
+function Install-PublicKey {
+    param($key, $entry, $entryIndex)
+    if (-not $key.HasPublic) {
+        Set-Status "❌ $($key.Name).pub not found in $sshDir, so there's nothing to install." Red
+        return
+    }
+    $target = "$($entry.Username)@$($entry.Host)"
+    Write-Host "`n📤 Install $($key.Name).pub on $target" -ForegroundColor Cyan
+    Write-Host "   Signs in the way entry [$entryIndex] does (key $($entry.Keyname)); if that key isn't"
+    Write-Host "   accepted, ssh tries your ssh-agent keys and then asks for the password."
+    Write-Host "   The key is added to ~/.ssh/authorized_keys on $target unless it's already there."
+    if (-not (Confirm-YesNo "Go ahead? (y/N)")) {
+        Set-Status "Install cancelled." DarkGray
+        return
+    }
+
+    $pubLine = Get-Content -LiteralPath $key.Public -TotalCount 1
+    Write-Host ""
+    $output = @($pubLine | & ssh -i $entry.KeyPath $target $InstallKeyCommand)
+
+    if ($output -contains "SSHPS1-ADDED") {
+        Write-Host "✅ Added $($key.Name) to ~/.ssh/authorized_keys on $target" -ForegroundColor Green
+    } elseif ($output -contains "SSHPS1-ALREADY") {
+        Write-Host "✅ $($key.Name) was already in ~/.ssh/authorized_keys on $target" -ForegroundColor Green
+    } else {
+        $output | ForEach-Object { Write-Host "   $_" }
+        Write-Host "`nPress Enter to continue..."
+        [void](Read-Host)
+        Set-Status "❌ Couldn't install $($key.Name) on $target (ssh exit code $LASTEXITCODE)." Red
+        return
+    }
+
+    # Prove the new key works on its own before offering to switch to it.
+    Write-Host "`n🔎 Testing sign-in with $($key.Name) only (it may ask for its passphrase)..."
+    $test = @(& ssh -i $key.Private -o IdentitiesOnly=yes -o PreferredAuthentications=publickey $target echo SSHPS1-OK)
+    if (-not ($test -contains "SSHPS1-OK")) {
+        Write-Host "`nPress Enter to continue..."
+        [void](Read-Host)
+        Set-Status "⚠️ Installed $($key.Name) on $target, but signing in with it failed. Entry [$entryIndex] left unchanged." Yellow
+        return
+    }
+    Write-Host "✅ Signed in with $($key.Name)." -ForegroundColor Green
+
+    if ($entry.Keyname -ne $key.Name) {
+        if (Confirm-YesNo "Switch menu entry [$entryIndex] ($($entry.Alias)) to use $($key.Name)? (y/N)") {
+            $parts = $hosts[$entry.HostIdx].Text -split '#'
+            $parts[3] = $key.Name
+            $lines = @(Get-Content -LiteralPath $ConfigFile)
+            $lines[$hosts[$entry.HostIdx].LineNo] = $parts -join '#'
+            Write-Config $lines
+            Set-Status "✅ Installed $($key.Name) on $target and switched entry [$entryIndex] to it." Green
+            return
+        }
+    }
+    Set-Status "✅ Installed $($key.Name) on $target and tested it." Green
+}
+
+# Pick a host from the menu entries, then install $key there.
+function Install-KeyOnChosenHost {
+    param($key)
+    $entries = @(Build-MenuItems $hosts $sshDir)
+    if ($entries.Count -eq 0) {
+        Set-Status "❌ There are no menu entries to install on." Red
+        return
+    }
+    $labels = @()
+    foreach ($e in $entries) { $labels += (Get-HostLabel $e) }
+    $pick = Select-FromList "📤 Install $($key.Name).pub on which host?" $labels
+    if ($pick -lt 0) {
+        Set-Status "Install cancelled." DarkGray
+        return
+    }
+    Install-PublicKey $key $entries[$pick] $pick
+}
+
+# Pick a key from the .ssh folder, then install it on menu entry $index.
+function Install-ChosenKeyOnHost {
+    param($index, $entry)
+    $keys = @(Get-KeyFiles | Where-Object { $_.HasPublic })
+    if ($keys.Count -eq 0) {
+        Set-Status "❌ No public keys (*.pub) found in $sshDir. ka creates one." Red
+        return
+    }
+    $labels = @()
+    foreach ($k in $keys) { $labels += ("{0}  {1} {2}  {3}" -f $k.Name, $k.Type, $k.Bits, $k.Comment) }
+    $pick = Select-FromList ("📤 Install which key on [{0}] {1}?" -f $index, (Get-HostLabel $entry)) $labels
+    if ($pick -lt 0) {
+        Set-Status "Install cancelled." DarkGray
+        return
+    }
+    Install-PublicKey $keys[$pick] $entry $index
+}
+
 # The key window (`ssh.ps1 keys`, opened by kl)
 function Show-KeyManager {
     while ($true) {
@@ -600,7 +729,7 @@ function Show-KeyManager {
             if (-not $k.HasPublic) { $flags += "no .pub file" }
             if ($flags.Count -gt 0) { Write-Host ("      {0}" -f ($flags -join ' · ')) -ForegroundColor DarkGray }
         }
-        Write-Host "`nAfter a number:  e edit comment   d delete" -ForegroundColor DarkGray
+        Write-Host "`nAfter a number:  e edit comment   d delete   i install on a host" -ForegroundColor DarkGray
         Write-Host "On its own:       ka add key   x close" -ForegroundColor DarkGray
         if ($StatusText) {
             Write-Host "`n$StatusText" -ForegroundColor $StatusColor
@@ -611,15 +740,16 @@ function Show-KeyManager {
         try {
             if ($choiceRaw -match '^x$') { return }
             elseif ($choiceRaw -match '^ka$') { New-KeyPair }
-            elseif ($choiceRaw -match '^(\d+)([ed])$') {
+            elseif ($choiceRaw -match '^(\d+)([edi])$') {
                 $n = [int]$Matches[1]
                 $op = $Matches[2].ToLower()
                 if ($n -ge $keys.Count) { Set-Status "❌ No key [$n]." Red }
                 elseif ($op -eq "e") { Edit-KeyComment $n $keys[$n] }
+                elseif ($op -eq "i") { Install-KeyOnChosenHost $keys[$n] }
                 else { Remove-Key $n $keys[$n] }
             }
             elseif ($choiceRaw -ne "") {
-                Set-Status "❌ Invalid choice. Try e.g. 0e, 0d, ka or x." Red
+                Set-Status "❌ Invalid choice. Try e.g. 0e, 0d, 0i, ka or x." Red
             }
         } catch {
             Set-Status "❌ $($_.Exception.Message)" Red
@@ -653,7 +783,7 @@ do {
     }
     Write-Host ("[{0}] Configure SSH Menu (edit config file)" -f $configIndex)
     Write-Host "`nAfter a number:  e edit   + insert above   - insert below   d delete" -ForegroundColor DarkGray
-    Write-Host "                  < up   > down   , top   . bottom" -ForegroundColor DarkGray
+    Write-Host "                  < up   > down   , top   . bottom   i install a key on this host" -ForegroundColor DarkGray
     Write-Host "On its own:       x exit   REVERT undo last change   ka add key   kl list keys" -ForegroundColor DarkGray
     if ($StatusText) {
         Write-Host "`n$StatusText" -ForegroundColor $StatusColor
@@ -676,7 +806,7 @@ do {
             $action = "revert"
             $isValid = $true
         }
-        elseif ($choiceRaw -match '^(\d+)([e+\-<>,.d])$') {
+        elseif ($choiceRaw -match '^(\d+)([e+\-<>,.di])$') {
             $action = $Matches[2].ToLower()
             $choiceRaw = $Matches[1]
             $n = [int]$choiceRaw
@@ -725,6 +855,7 @@ do {
                 "+"      { Insert-Entry $choice $entry }
                 "-"      { Insert-Entry $choice $entry -Below }
                 "d"      { Remove-Entry $choice $entry }
+                "i"      { Install-ChosenKeyOnHost $choice $entry }
                 "<"      { Move-Entry $choice ($choice - 1) }
                 ">"      { Move-Entry $choice ($choice + 1) }
                 ","      { Move-Entry $choice 0 }

@@ -36,7 +36,7 @@ Then bring up the following:
 [5] Configure SSH Menu (edit config file)
 
 After a number:  e edit   + insert above   - insert below   d delete
-                  < up   > down   , top   . bottom
+                  < up   > down   , top   . bottom   i install a key on this host
 On its own:       x exit   REVERT undo last change   ka add key   kl list keys
 
 Enter the number of your choice:
@@ -129,6 +129,7 @@ Type an entry's number followed by one of these (`REVERT` and `x` are typed on t
 | `6,` | Move entry 6 to the top |
 | `6.` | Move entry 6 to the bottom |
 | `6d` | Delete entry 6 (you must type `YES` in capitals to confirm) |
+| `6i` | Install one of your public keys on entry 6's host (see "Installing a public key on a host" below) |
 | `REVERT` | Undo the last change (type it again to go back further) |
 | `x` | Exit the menu |
 | `ka` | Create a new key pair (see below) |
@@ -185,7 +186,7 @@ Changes made in Notepad (the "Configure SSH Menu" option) aren't backed up.
 - **Name:** default `id_<type>_<date>`, e.g. `id_ed25519_2026-11-24`. It must contain `id_` so the menu treats it as a key, and it can't already exist.
 - **Comment:** default `<username>@<computer> <date>`
 
-It then runs `ssh-keygen`, which asks for the passphrase. The new key is added to the key list in `ssh-config-menu` (with a backup first, so `REVERT` works), and the public key is shown and copied to the clipboard ready to paste into a server's `~/.ssh/authorized_keys`. Finally it offers to load the key into ssh-agent.
+It then runs `ssh-keygen`, which asks for the passphrase. The new key is added to the key list in `ssh-config-menu` (with a backup first, so `REVERT` works), and the public key is shown and copied to the clipboard ready to paste into a server's `~/.ssh/authorized_keys`. Finally it offers to load the key into ssh-agent and to install it on one of your menu hosts.
 
 Windows uses the same file names as Linux: the private key has no extension (`id_ed25519_work`) and the public key ends in `.pub` (`id_ed25519_work.pub`).
 
@@ -198,7 +199,7 @@ Windows uses the same file names as Linux: the private key has no extension (`id
 [1] id_ed25519_mdsp  ED25519 256  you@PC123 2026-11-24
       in key list
 
-After a number:  e edit comment   d delete
+After a number:  e edit comment   d delete   i install on a host
 On its own:       ka add key   x close
 ```
 
@@ -206,10 +207,25 @@ On its own:       ka add key   x close
 |---|---|
 | `0e` | Edit key 0's comment (`ssh-keygen -c`; it may ask for the passphrase). Only works for keys in the newer OpenSSH format; very old RSA keys don't store a comment. |
 | `0d` | Delete key 0. It shows which menu entries use it, then you must type `YES` in capitals. The key files are **moved** to `.ssh\deleted\<date_time>\` rather than erased, the key is removed from ssh-agent, and its line is removed from the key list in `ssh-config-menu`. |
+| `0i` | Install key 0 on one of your menu hosts (see below) |
 | `ka` | Add a key pair, as above |
 | `x` | Close the key window |
 
 You can also open the key window directly with `.\ssh.ps1 keys`.
+
+### Installing a public key on a host
+
+There are three ways in:
+- **Main menu `6i`:** pick which key to install on entry 6's host.
+- **Key window `0i`:** pick which host to install key 0 on.
+- **At the end of `ka`:** answer `y` to "Install it on one of your menu hosts now?"
+
+What happens:
+1. It signs in the way that menu entry already does, using its current key. If that key isn't accepted, ssh tries your ssh-agent keys and then asks for the password.
+2. It adds the public key to `~/.ssh/authorized_keys` on the server, creating `~/.ssh` if needed with owner-only permissions. If that exact key line is already there, it says so and adds nothing. On SELinux servers it also runs `restorecon`, as `ssh-copy-id` does.
+3. It tests signing in with the new key on its own. If that works and the menu entry uses a different key, it offers to switch the entry to the new key (with a backup, so `REVERT` works).
+
+This is the Windows equivalent of Linux's `ssh-copy-id`. The server needs a `sh`-compatible shell (bash, sh, ksh, zsh).
 
 ## Installation
 
