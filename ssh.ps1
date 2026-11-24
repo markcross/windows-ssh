@@ -354,8 +354,8 @@ function Move-Entry {
 do {
     Clear-Host
     $menuItems = Build-MenuItems $hosts $sshDir
-    $exitIndex = $menuItems.Count
-    $configIndex = $exitIndex + 1  # New menu index for config editor
+    $hostCount = $menuItems.Count
+    $configIndex = $hostCount  # Configure comes straight after the hosts (x exits)
 
     Write-Host "`n📡 SSH Quick Connect Menu" -ForegroundColor Cyan
     if ($menuItems.Count -eq 0) {
@@ -368,10 +368,10 @@ do {
         if ($entry.Folder) { $target += ":" + $entry.Folder }
         Write-Host ("[{0}] {1} ({2}) [key: {3}]" -f $i, $target, $entry.Alias, $entry.Keyname)
     }
-    Write-Host ("[{0}] Exit" -f $exitIndex)
     Write-Host ("[{0}] Configure SSH Menu (edit config file)" -f $configIndex)
     Write-Host "`nAfter a number:  e edit   + insert above   - insert below   d delete" -ForegroundColor DarkGray
-    Write-Host "                  < up   > down   , top   . bottom      REVERT undo last change" -ForegroundColor DarkGray
+    Write-Host "                  < up   > down   , top   . bottom" -ForegroundColor DarkGray
+    Write-Host "On its own:       x exit   REVERT undo last change" -ForegroundColor DarkGray
     if ($StatusText) {
         Write-Host "`n$StatusText" -ForegroundColor $StatusColor
         Set-Status ""
@@ -381,7 +381,11 @@ do {
     do {
         $choiceRaw = (Read-Host "`nEnter the number of your choice").Trim()
         $isValid = $false
-        if ($choiceRaw -match '^revert$') {
+        if ($choiceRaw -match '^x$') {
+            $action = "exit"
+            $isValid = $true
+        }
+        elseif ($choiceRaw -match '^revert$') {
             $action = "revert"
             $isValid = $true
         }
@@ -393,18 +397,23 @@ do {
                 $isValid = $n -eq 0 -and ($action -eq "+" -or $action -eq "-")
                 if (-not $isValid) { Write-Host "❌ There are no entries yet: type 0+ to add one." }
             } else {
-                $isValid = $n -lt $exitIndex
-                if (-not $isValid) { Write-Host "❌ That only works on host entries: 0 to $($exitIndex - 1)." }
+                $isValid = $n -lt $hostCount
+                if (-not $isValid) { Write-Host "❌ That only works on host entries: 0 to $($hostCount - 1)." }
             }
         }
         else {
             $action = "connect"
             $isValid = $choiceRaw -match '^\d+$' -and [int]$choiceRaw -ge 0 -and [int]$choiceRaw -le $configIndex
             if (-not $isValid) {
-                Write-Host "❌ Invalid choice. Enter a number between 0 and $configIndex, or e.g. 0e to edit."
+                Write-Host "❌ Invalid choice. Enter a number between 0 and $configIndex, x to exit, or e.g. 0e to edit."
             }
         }
     } while (-not $isValid)
+
+    if ($action -eq "exit") {
+        Write-Host "`n👋 Exiting."
+        break
+    }
 
     if ($action -ne "connect") {
         $entry = $null
@@ -432,11 +441,7 @@ do {
 
     $choice = [int]$choiceRaw
 
-    if ($choice -eq $exitIndex) {
-        Write-Host "`n👋 Exiting."
-        break
-    }
-    elseif ($choice -eq $configIndex) {
+    if ($choice -eq $configIndex) {
         Write-Host "`n📝 Opening config file in Notepad: $ConfigFile"
         Start-Process notepad.exe $ConfigFile
         break
