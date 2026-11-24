@@ -29,7 +29,7 @@ foreach ($lineRaw in Get-Content $ConfigFile) {
         $sshDir = $Matches[1] -replace '\$env:USERPROFILE', $env:USERPROFILE
         $sshDir = $sshDir.Trim('"')
     }
-    elseif ($line -ne "" -and $line -notmatch '^#' -and ($line -match '\.pem' -or $line -match '^id_')) {
+    elseif ($line -ne "" -and $line -notmatch '#' -and ($line -match '\.pem' -or $line -match 'id_')) {
         $privateKeys += $line
     }
     elseif ($line -ne "" -and $line -notmatch '^#' -and $line -match '^[^#]+(#[^#]+){3,4}$') {

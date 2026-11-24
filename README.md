@@ -69,7 +69,7 @@ bluebottle#bluebottle#mark#id_ecdsa_2024-04-17
 ## Explanation
 
 First line .ssh path if customised - define here.
-Lines before host definitions
+Lines before host definitions (a key line is any line with no `#` that contains `id_` or `.pem`, e.g. `id_ecdsa_2024-04-17`, `2013_id_rsa`, `aws.pem`)
 Checks if each private file(s) exist
 If exists and not already loaded, it runs ssh-add to cache the passphrase
 So this block is your “key list” that the script automatically feeds into ssh-agent
@@ -131,6 +131,8 @@ It is way too complicated and easy to make a mistake and does not integrate "ssh
 **Why is 2013_id_rsa in the ssh-config-menu on the third line?**
 
 "Well cook me a kipper for breakfast", you are sharp! This was legacy but I thought I would leave it as a README comprehension test :-)
+
+It used to be silently ignored because it doesn't start with `id_`. Key lines now only need to contain `id_` (or `.pem`) anywhere, so it is loaded into ssh-agent like the others. Remove the line if you don't want it loaded.
 
 I hope you find this an absolute time saver and a putty buster. I have nothing against putty, I just hate having to use Windows.
 
