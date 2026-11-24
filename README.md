@@ -72,6 +72,39 @@ Letters can be typed in either case (`6E`, `X`, `revert`), except that delete ne
 
 ### Key window (`kl`)
 
+```
+🔑 SSH keys in C:\Users\you\.ssh
+[0] 2013_id_rsa  RSA 2048  old-laptop 2013
+      in key list
+[1] aws.pem  ?
+      no .pub file
+[2] id_ecdsa_2024-04-17  ED25519 256  your_email@example.com 2026-05-22
+      loaded in ssh-agent · in key list · used by: Bastion as mark.cross, JumpBox, PRIMARY Bastion, SECONDARY Bastion, bluebottle
+[3] id_ed25519_2026-11-24  ED25519 256  you@PC123 2026-11-24
+      loaded in ssh-agent · in key list
+[4] id_ed25519_mdsp  ED25519 256  you@PC123 2026-11-24
+      in key list · used by: cainsight
+
+After a number:  e edit comment   d delete   i install on a host
+On its own:       ka add key   x close
+
+✅ Created id_ed25519_2026-11-24.
+
+Enter your choice:
+```
+
+Each key shows its name, type and length, and comment. Keys are sorted by name, and the grey line underneath says:
+
+| Flag | Meaning |
+|---|---|
+| `loaded in ssh-agent` | The key is cached in ssh-agent right now, so it won't ask for its passphrase |
+| `in key list` | It's listed in `ssh-config-menu`, so `.\ssh.ps1 add` loads it |
+| `used by: …` | The menu entries (by alias) whose Key is this key |
+| `no .pub file` | Only the private key was found (e.g. a `.pem` from AWS). Its type shows as `?` with no length or comment, it can't be installed with `i`, and the menu can't tell whether it's loaded |
+| `no private key file` | Only the `.pub` was found. Its comment can't be edited, and although `i` can install it, the sign-in test afterwards will fail without the private key |
+
+The line starting `✅` is the result of the last action (here, `ka` creating a key). It disappears at the next redraw.
+
 | Type | Does |
 |---|---|
 | `0e` | Edit key 0's comment |
@@ -220,18 +253,7 @@ It then runs `ssh-keygen`, which asks for the passphrase. The new key is added t
 
 Windows uses the same file names as Linux: the private key has no extension (`id_ed25519_work`) and the public key ends in `.pub` (`id_ed25519_work.pub`).
 
-**`kl`: list keys.** Opens a new window listing every key pair in your `.ssh` folder:
-
-```
-🔑 SSH keys in C:\Users\you\.ssh
-[0] id_ecdsa_2024-04-17  ED25519 256  you@example.com 2024-04-17
-      loaded in ssh-agent · in key list · used by: JumpBox, PRIMARY Bastion
-[1] id_ed25519_mdsp  ED25519 256  you@PC123 2026-11-24
-      in key list
-
-After a number:  e edit comment   d delete   i install on a host
-On its own:       ka add key   x close
-```
+**`kl`: list keys.** Opens a new window listing every key pair in your `.ssh` folder. There's an example of the page, with what each flag means, under [Key window](#key-window-kl).
 
 | Type | Does |
 |---|---|
