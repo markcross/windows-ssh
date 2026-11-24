@@ -22,9 +22,10 @@ $sshDir = ""
 $privateKeys = @()
 $hosts = @()
 
-# Read the file ourselves (not Get-Content) so line numbers match exactly what
-# Save-ConfigLine writes back when an entry is edited.
-$configLines = [System.IO.File]::ReadAllText($ConfigFile) -split "`r?`n"
+# Only cmdlets here, no direct .NET calls: corporate machines often run PowerShell
+# in Constrained Language Mode, which blocks things like [IO.File]::ReadAllText.
+# Save-ConfigLine reads the file the same way, so line numbers always match.
+$configLines = @(Get-Content -LiteralPath $ConfigFile)
 
 for ($lineNo = 0; $lineNo -lt $configLines.Count; $lineNo++) {
     $line = $configLines[$lineNo].Trim()
@@ -120,16 +121,16 @@ function Build-MenuItems {
 # --- Edit an entry (menu "<n>m") ---
 function Save-ConfigLine {
     param($path, $lineNo, $newText)
-    # Keep the file's BOM (or lack of one), line endings and every other line as-is.
-    $bytes = [System.IO.File]::ReadAllBytes($path)
-    $hasBom = $bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF
-    $text = [System.IO.File]::ReadAllText($path)
-    $nl = if ($text -match "`r`n") { "`r`n" } else { "`n" }
-    $lines = $text -split "`r?`n"
+    # Cmdlets only (Constrained Language Mode safe). Every other line is written
+    # back unchanged. Write with the same encoding Get-Content read it with:
+    # UTF-8 if the file has a UTF-8 BOM, otherwise the Windows default.
+    $lines = @(Get-Content -LiteralPath $path)
     $lines[$lineNo] = $newText
-    Copy-Item $path "$path.bak" -Force
-    $encoding = New-Object System.Text.UTF8Encoding($hasBom)
-    [System.IO.File]::WriteAllText($path, ($lines -join $nl), $encoding)
+    $firstBytes = @(Get-Content -LiteralPath $path -Encoding Byte -TotalCount 3 -ErrorAction SilentlyContinue)
+    $hasBom = $firstBytes.Count -eq 3 -and $firstBytes[0] -eq 0xEF -and $firstBytes[1] -eq 0xBB -and $firstBytes[2] -eq 0xBF
+    $encoding = if ($hasBom) { "UTF8" } else { "Default" }
+    Copy-Item -LiteralPath $path -Destination "$path.bak" -Force
+    Set-Content -LiteralPath $path -Value $lines -Encoding $encoding -ErrorAction Stop
 }
 
 function Read-Field {
@@ -201,6 +202,10 @@ do {
     $configIndex = $exitIndex + 1  # New menu index for config editor
 
     Write-Host "`n📡 SSH Quick Connect Menu" -ForegroundColor Cyan
+    if ($menuItems.Count -eq 0) {
+        Write-Host "⚠️ No host entries found in $ConfigFile" -ForegroundColor Yellow
+        Write-Host "   Expected lines like: Alias#Host#Username#Keyname[#Folder]" -ForegroundColor Yellow
+    }
     for ($i = 0; $i -lt $menuItems.Count; $i++) {
         $entry = $menuItems[$i]
         $target = "{0}@{1}" -f $entry.Username, $entry.Host
@@ -237,7 +242,7 @@ do {
     if ($editMode) {
         Edit-MenuEntry $choice $menuItems[$choice]
         Write-Host "`nPress Enter to return to menu..."
-        [void][System.Console]::ReadLine()
+        [void](Read-Host)
         continue
     }
 
@@ -276,7 +281,7 @@ do {
 	# Start-Process wt.exe -ArgumentList "new-tab", "powershell", "-NoExit", "-Command", $sshCmd  # Didn't work to spawn to a tab instead of new window
     
     Write-Host "`nPress Enter to return to menu..."
-    [void][System.Console]::ReadLine()
+    [void](Read-Host)
 } while ($true)
 
 # I'm currently using Windows Terminal to front WSL 2 Ubuntu. I use it to SSH out to multiple servers.
