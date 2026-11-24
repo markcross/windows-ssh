@@ -194,7 +194,7 @@ function Confirm-YesNo {
     return ($answer -match '^(y|yes)$')
 }
 
-# --- Entry editing: <n>m edit, <n>+ insert above, <n>- insert below ---
+# --- Entry editing: <n>e edit, <n>+ insert above, <n>- insert below ---
 function Read-Field {
     param($label, $current, [switch]$AllowClear)
     while ($true) {
@@ -370,7 +370,7 @@ do {
     }
     Write-Host ("[{0}] Exit" -f $exitIndex)
     Write-Host ("[{0}] Configure SSH Menu (edit config file)" -f $configIndex)
-    Write-Host "`nAfter a number:  m edit   + insert above   - insert below   d delete" -ForegroundColor DarkGray
+    Write-Host "`nAfter a number:  e edit   + insert above   - insert below   d delete" -ForegroundColor DarkGray
     Write-Host "                  < up   > down   , top   . bottom      REVERT undo last change" -ForegroundColor DarkGray
     if ($StatusText) {
         Write-Host "`n$StatusText" -ForegroundColor $StatusColor
@@ -385,7 +385,7 @@ do {
             $action = "revert"
             $isValid = $true
         }
-        elseif ($choiceRaw -match '^(\d+)([m+\-<>,.d])$') {
+        elseif ($choiceRaw -match '^(\d+)([e+\-<>,.d])$') {
             $action = $Matches[2].ToLower()
             $choiceRaw = $Matches[1]
             $n = [int]$choiceRaw
@@ -401,7 +401,7 @@ do {
             $action = "connect"
             $isValid = $choiceRaw -match '^\d+$' -and [int]$choiceRaw -ge 0 -and [int]$choiceRaw -le $configIndex
             if (-not $isValid) {
-                Write-Host "❌ Invalid choice. Enter a number between 0 and $configIndex, or e.g. 0m to edit."
+                Write-Host "❌ Invalid choice. Enter a number between 0 and $configIndex, or e.g. 0e to edit."
             }
         }
     } while (-not $isValid)
@@ -415,7 +415,7 @@ do {
         try {
             switch ($action) {
                 "revert" { Restore-Config }
-                "m"      { Edit-Entry $choice $entry }
+                "e"      { Edit-Entry $choice $entry }
                 "+"      { Insert-Entry $choice $entry }
                 "-"      { Insert-Entry $choice $entry -Below }
                 "d"      { Remove-Entry $choice $entry }

@@ -118,7 +118,7 @@ Type an entry's number followed by one of these, then press Enter:
 
 | Type | Does |
 |---|---|
-| `6m` | Edit entry 6 |
+| `6e` | Edit entry 6 |
 | `6+` | Insert a new entry above 6, then edit it |
 | `6-` | Insert a new entry below 6, then edit it |
 | `6<` | Move entry 6 up one place |
@@ -133,7 +133,7 @@ The menu shows a reminder of these under the list, and a one-line result (e.g. `
 **Editing** shows each field with its current value: press Enter to keep it, or type a new value. For Folder, type `-` to remove it.
 
 ```
-Enter the number of your choice: 6m
+Enter the number of your choice: 6e
 
 ✏️  Editing entry [6]  (press Enter to keep the value shown)
     For Folder, type - to remove it.
