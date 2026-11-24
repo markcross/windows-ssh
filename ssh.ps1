@@ -11,6 +11,8 @@ $ShouldAddKeys = $false
 if ($args.Length -gt 0 -and $args[0].ToLower() -eq 'add') {
     $ShouldAddKeys = $true
 }
+# `ssh.ps1 keys` opens the key window (what kl launches)
+$KeyMode = $args.Length -gt 0 -and $args[0].ToLower() -eq 'keys'
 
 if (-not (Test-Path $ConfigFile)) {
     Write-Host "❌ Config file not found: $ConfigFile"
@@ -137,24 +139,27 @@ function Ensure-All-Keys-Added {
     }
 }
 
-# --- Only add keys if requested ---
-if ($ShouldAddKeys) {
-    Ensure-All-Keys-Added -keyList $privateKeys -sshDir $sshDir
-}
-
-Write-Host "`n✅ Currently loaded SSH keys (via ssh-agent):" -ForegroundColor Green
-try {
-    $agentKeys = & ssh-add -L
-    if ($agentKeys.Count -eq 0) {
-        Write-Host "❌ No keys currently loaded in ssh-agent." -ForegroundColor Red
-    } else {
-        $agentKeys | ForEach-Object { Write-Host "  • $_" }
+# --- Show loaded keys (skipped in the key window) ---
+if (-not $KeyMode) {
+    # --- Only add keys if requested ---
+    if ($ShouldAddKeys) {
+        Ensure-All-Keys-Added -keyList $privateKeys -sshDir $sshDir
     }
-} catch {
-    Write-Host "⚠️ Unable to retrieve keys from ssh-agent." -ForegroundColor Yellow
-}
 
-Start-Sleep -Seconds 3
+    Write-Host "`n✅ Currently loaded SSH keys (via ssh-agent):" -ForegroundColor Green
+    try {
+        $agentKeys = & ssh-add -L
+        if ($agentKeys.Count -eq 0) {
+            Write-Host "❌ No keys currently loaded in ssh-agent." -ForegroundColor Red
+        } else {
+            $agentKeys | ForEach-Object { Write-Host "  • $_" }
+        }
+    } catch {
+        Write-Host "⚠️ Unable to retrieve keys from ssh-agent." -ForegroundColor Yellow
+    }
+
+    Start-Sleep -Seconds 3
+}
 
 # --- Build host menu items ---
 function Build-MenuItems {
@@ -350,9 +355,287 @@ function Move-Entry {
     Set-Status "✅ Moved [$from] to [$to]." Green
 }
 
+# --- SSH key management ---
+# ka = add a key pair (main menu and key window)
+# kl = open the key window: `ssh.ps1 keys` in a new PowerShell window, where
+#      <n>e edits a key's comment and <n>d deletes a key.
+
+function Get-Today { return (Get-Date -Format "yyyy-MM-dd") }
+
+# Is this a key line in ssh-config-menu? (same rule as Read-Config)
+function Test-KeyLine {
+    param($line)
+    $t = $line.Trim()
+    return ($t -ne "" -and $t -notmatch '#' -and ($t -match '\.pem' -or $t -match 'id_'))
+}
+
+# One entry per key in $sshDir: found from *.pub files, plus private keys
+# (files starting -----BEGIN ... PRIVATE KEY-----) that have no .pub.
+function Get-KeyFiles {
+    $files = @(Get-ChildItem -LiteralPath $sshDir -File -ErrorAction SilentlyContinue)
+    $names = @()
+    foreach ($f in $files) {
+        if ($f.Name -like "*.pub") { $names += $f.Name.Substring(0, $f.Name.Length - 4) }
+    }
+    foreach ($f in $files) {
+        if ($f.Name -like "*.pub" -or $names -contains $f.Name) { continue }
+        $first = Get-Content -LiteralPath $f.FullName -TotalCount 1 -ErrorAction SilentlyContinue
+        if ($first -match '^-----BEGIN .*PRIVATE KEY-----') { $names += $f.Name }
+    }
+    $names = @($names | Sort-Object)
+
+    $agentList = @(& ssh-add -l 2>$null)
+    $keys = @()
+    foreach ($name in $names) {
+        $priv = "$sshDir\$name"
+        $pub = "$priv.pub"
+        $key = @{
+            Name = $name; Private = $priv; Public = $pub
+            HasPrivate = (Test-Path -LiteralPath $priv); HasPublic = (Test-Path -LiteralPath $pub)
+            Type = "?"; Bits = ""; Comment = ""; Fingerprint = ""; Loaded = $false
+            InKeyList = ($privateKeys -contains $name); UsedBy = @()
+        }
+        if ($key.HasPublic) {
+            # "256 SHA256:abc... the comment (ED25519)"
+            $info = @(& ssh-keygen -l -f $pub 2>$null) | Select-Object -First 1
+            if ($info -match '^(\d+)\s+(\S+)\s+(.*)\s+\(([^)]+)\)$') {
+                $key.Bits = $Matches[1]; $key.Fingerprint = $Matches[2]
+                $key.Comment = $Matches[3]; $key.Type = $Matches[4]
+                if ($key.Comment -eq "no comment") { $key.Comment = "" }
+            }
+        }
+        if ($key.Fingerprint) {
+            $fp = $key.Fingerprint
+            $key.Loaded = @($agentList | Where-Object { $_ -like "*$fp*" }).Count -gt 0
+        }
+        foreach ($h in $hosts) {
+            $parts = $h.Text -split '#'
+            if ($parts[3] -eq $name) { $key.UsedBy += $parts[0] }
+        }
+        $keys += $key
+    }
+    return $keys
+}
+
+function New-KeyPair {
+    Write-Host "`n🔑 Create a new key pair  (press Enter to accept the value shown)" -ForegroundColor Cyan
+
+    Write-Host "  Types: [1] ed25519 (recommended)   [2] ecdsa   [3] rsa"
+    while ($true) {
+        $answer = (Read-Host "  Type     [1]").Trim()
+        if ($answer -eq "" -or $answer -eq "1" -or $answer -eq "ed25519") { $type = "ed25519"; break }
+        if ($answer -eq "2" -or $answer -eq "ecdsa") { $type = "ecdsa"; break }
+        if ($answer -eq "3" -or $answer -eq "rsa") { $type = "rsa"; break }
+        Write-Host "    ❌ Enter 1, 2 or 3." -ForegroundColor Red
+    }
+
+    $bits = ""
+    if ($type -eq "ed25519") {
+        Write-Host "  Length   256 (fixed for ed25519)"
+    } else {
+        if ($type -eq "ecdsa") { $allowed = @("256", "384", "521"); $default = "256" }
+        else                   { $allowed = @("2048", "3072", "4096"); $default = "4096" }
+        while ($true) {
+            $answer = (Read-Host ("  Length   [{0}]  ({1})" -f $default, ($allowed -join " / "))).Trim()
+            if ($answer -eq "") { $bits = $default; break }
+            if ($allowed -contains $answer) { $bits = $answer; break }
+            Write-Host "    ❌ Choose one of: $($allowed -join ', ')" -ForegroundColor Red
+        }
+    }
+
+    $today = Get-Today
+    $defaultName = "id_$($type)_$today"
+    while ($true) {
+        $name = (Read-Host "  Name     [$defaultName]").Trim()
+        if ($name -eq "") { $name = $defaultName }
+        if ($name -notmatch '^[A-Za-z0-9._-]+$') {
+            Write-Host "    ❌ Use letters, numbers, . _ and - only." -ForegroundColor Red
+            continue
+        }
+        if ($name -notmatch 'id_') {
+            # ssh-config-menu only treats lines containing id_ (or .pem) as keys
+            Write-Host "    ❌ The name must contain id_ (e.g. id_ed25519_work) so the menu treats it as a key." -ForegroundColor Red
+            continue
+        }
+        if ((Test-Path -LiteralPath "$sshDir\$name") -or (Test-Path -LiteralPath "$sshDir\$name.pub")) {
+            Write-Host "    ❌ $name already exists in $sshDir. Choose another name." -ForegroundColor Red
+            continue
+        }
+        break
+    }
+
+    $defaultComment = "$env:USERNAME@$env:COMPUTERNAME $today"
+    $comment = (Read-Host "  Comment  [$defaultComment]").Trim()
+    if ($comment -eq "") { $comment = $defaultComment }
+
+    $path = "$sshDir\$name"
+    $kgArgs = @("-t", $type)
+    if ($bits) { $kgArgs += @("-b", $bits) }
+    $kgArgs += @("-f", $path, "-C", $comment)
+
+    Write-Host "`n  Running: ssh-keygen $($kgArgs -join ' ')" -ForegroundColor DarkGray
+    Write-Host "  ssh-keygen will now ask for a passphrase (Enter twice for none).`n"
+    & ssh-keygen @kgArgs
+
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $path)) {
+        Set-Status "❌ ssh-keygen didn't create $name." Red
+        return
+    }
+    Write-Host "`n✅ Created $name and $name.pub" -ForegroundColor Green
+
+    # Add to the key list in ssh-config-menu, after the last key line
+    # (or after the .ssh line, or at the top), so `ssh.ps1 add` loads it.
+    $lines = @(Get-Content -LiteralPath $ConfigFile)
+    $at = 0
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        if ($lines[$i].Trim() -match '^\.ssh\s*=' -and $at -eq 0) { $at = $i + 1 }
+        if (Test-KeyLine $lines[$i]) { $at = $i + 1 }
+    }
+    $out = @()
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        if ($i -eq $at) { $out += $name }
+        $out += $lines[$i]
+    }
+    if ($at -ge $lines.Count) { $out += $name }
+    Write-Config $out
+    Write-Host "   Added $name to the key list in ssh-config-menu"
+
+    $pubText = (Get-Content -LiteralPath "$path.pub" -TotalCount 1)
+    Write-Host "`n   Public key (paste into the server's ~/.ssh/authorized_keys):"
+    Write-Host "   $pubText" -ForegroundColor Cyan
+    try {
+        Set-Clipboard -Value $pubText -ErrorAction Stop
+        Write-Host "   📋 Copied to clipboard."
+    } catch {
+        Write-Host "   (Couldn't copy to the clipboard; copy it from above.)" -ForegroundColor Yellow
+    }
+
+    if (Confirm-YesNo "Load it into ssh-agent now? (y/N)") {
+        & ssh-add $path
+    }
+    Write-Host "`nPress Enter to continue..."
+    [void](Read-Host)
+    Set-Status "✅ Created $name." Green
+}
+
+function Edit-KeyComment {
+    param($index, $key)
+    if (-not $key.HasPrivate) {
+        Set-Status "❌ $($key.Name): the private key isn't in $sshDir, so its comment can't be changed." Red
+        return
+    }
+    Write-Host "`n✏️  Edit comment of key [$index] $($key.Name)  (press Enter to keep it)" -ForegroundColor Cyan
+    $new = (Read-Host "  Comment  [$($key.Comment)]").Trim()
+    if ($new -eq "" -or $new -eq $key.Comment) {
+        Set-Status "No change to [$index]." DarkGray
+        return
+    }
+    Write-Host "`n  ssh-keygen may ask for the key's passphrase.`n" -ForegroundColor DarkGray
+    & ssh-keygen -c -C $new -f $key.Private
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "`nPress Enter to continue..."
+        [void](Read-Host)
+        Set-Status "❌ ssh-keygen couldn't change the comment of $($key.Name) (see its message above)." Red
+        return
+    }
+    $note = ""
+    if ($key.Loaded) { $note = " ssh-agent shows the old comment until the key is loaded again." }
+    Set-Status "✅ Comment of $($key.Name) is now: $new.$note" Green
+}
+
+function Remove-Key {
+    param($index, $key)
+    Write-Host "`n🗑️  Delete key [$index] $($key.Name)?" -ForegroundColor Yellow
+    if ($key.HasPrivate) { Write-Host "  $($key.Private)" }
+    if ($key.HasPublic)  { Write-Host "  $($key.Public)" }
+    if ($key.UsedBy.Count -gt 0) {
+        Write-Host "`n  ⚠️ Used by menu entries: $($key.UsedBy -join ', ')" -ForegroundColor Yellow
+        Write-Host "     They won't be able to connect with this key any more." -ForegroundColor Yellow
+    }
+    if ($key.InKeyList) { Write-Host "  It will also be removed from the key list in ssh-config-menu." }
+
+    $answer = Read-Host "`nAre you sure? Type YES (in capitals) to delete"
+    if ($answer -cne "YES") {
+        Set-Status "Delete cancelled." DarkGray
+        return
+    }
+
+    if ($key.Loaded -and $key.HasPrivate) { & ssh-add -d $key.Private 2>&1 | Out-Null }
+
+    # Moved, not erased: a deleted private key can't be recovered otherwise.
+    $bin = "$sshDir\deleted\$(Get-Date -Format 'yyyy-MM-dd_HHmmss')"
+    New-Item -ItemType Directory -Path $bin -Force | Out-Null
+    if ($key.HasPrivate) { Move-Item -LiteralPath $key.Private -Destination $bin -Force }
+    if ($key.HasPublic)  { Move-Item -LiteralPath $key.Public  -Destination $bin -Force }
+
+    if ($key.InKeyList) {
+        $lines = @(Get-Content -LiteralPath $ConfigFile)
+        $out = @()
+        foreach ($l in $lines) {
+            if (-not ((Test-KeyLine $l) -and $l.Trim() -eq $key.Name)) { $out += $l }
+        }
+        Write-Config $out
+    }
+    Set-Status "✅ Deleted $($key.Name) (moved to $bin)." Green
+}
+
+# The key window (`ssh.ps1 keys`, opened by kl)
+function Show-KeyManager {
+    while ($true) {
+        Clear-Host
+        Read-Config
+        $keys = @(Get-KeyFiles)
+
+        Write-Host "`n🔑 SSH keys in $sshDir" -ForegroundColor Cyan
+        if ($keys.Count -eq 0) { Write-Host "  (no keys found; ka creates one)" -ForegroundColor Yellow }
+        for ($i = 0; $i -lt $keys.Count; $i++) {
+            $k = $keys[$i]
+            $size = if ($k.Bits) { "$($k.Type) $($k.Bits)" } else { $k.Type }
+            Write-Host ("[{0}] {1}  {2}  {3}" -f $i, $k.Name, $size, $k.Comment)
+            $flags = @()
+            if ($k.Loaded) { $flags += "loaded in ssh-agent" }
+            if ($k.InKeyList) { $flags += "in key list" }
+            if ($k.UsedBy.Count -gt 0) { $flags += "used by: $($k.UsedBy -join ', ')" }
+            if (-not $k.HasPrivate) { $flags += "no private key file" }
+            if (-not $k.HasPublic) { $flags += "no .pub file" }
+            if ($flags.Count -gt 0) { Write-Host ("      {0}" -f ($flags -join ' · ')) -ForegroundColor DarkGray }
+        }
+        Write-Host "`nAfter a number:  e edit comment   d delete" -ForegroundColor DarkGray
+        Write-Host "On its own:       ka add key   x close" -ForegroundColor DarkGray
+        if ($StatusText) {
+            Write-Host "`n$StatusText" -ForegroundColor $StatusColor
+            Set-Status ""
+        }
+
+        $choiceRaw = (Read-Host "`nEnter your choice").Trim()
+        try {
+            if ($choiceRaw -match '^x$') { return }
+            elseif ($choiceRaw -match '^ka$') { New-KeyPair }
+            elseif ($choiceRaw -match '^(\d+)([ed])$') {
+                $n = [int]$Matches[1]
+                $op = $Matches[2].ToLower()
+                if ($n -ge $keys.Count) { Set-Status "❌ No key [$n]." Red }
+                elseif ($op -eq "e") { Edit-KeyComment $n $keys[$n] }
+                else { Remove-Key $n $keys[$n] }
+            }
+            elseif ($choiceRaw -ne "") {
+                Set-Status "❌ Invalid choice. Try e.g. 0e, 0d, ka or x." Red
+            }
+        } catch {
+            Set-Status "❌ $($_.Exception.Message)" Red
+        }
+    }
+}
+
+if ($KeyMode) {
+    Show-KeyManager
+    exit
+}
+
 # --- Main menu loop ---
 do {
     Clear-Host
+    Read-Config   # picks up changes from the key window or Notepad
     $menuItems = Build-MenuItems $hosts $sshDir
     $hostCount = $menuItems.Count
     $configIndex = $hostCount  # Configure comes straight after the hosts (x exits)
@@ -371,7 +654,7 @@ do {
     Write-Host ("[{0}] Configure SSH Menu (edit config file)" -f $configIndex)
     Write-Host "`nAfter a number:  e edit   + insert above   - insert below   d delete" -ForegroundColor DarkGray
     Write-Host "                  < up   > down   , top   . bottom" -ForegroundColor DarkGray
-    Write-Host "On its own:       x exit   REVERT undo last change" -ForegroundColor DarkGray
+    Write-Host "On its own:       x exit   REVERT undo last change   ka add key   kl list keys" -ForegroundColor DarkGray
     if ($StatusText) {
         Write-Host "`n$StatusText" -ForegroundColor $StatusColor
         Set-Status ""
@@ -383,6 +666,10 @@ do {
         $isValid = $false
         if ($choiceRaw -match '^x$') {
             $action = "exit"
+            $isValid = $true
+        }
+        elseif ($choiceRaw -match '^(ka|kl)$') {
+            $action = $choiceRaw.ToLower()
             $isValid = $true
         }
         elseif ($choiceRaw -match '^revert$') {
@@ -413,6 +700,16 @@ do {
     if ($action -eq "exit") {
         Write-Host "`n👋 Exiting."
         break
+    }
+
+    if ($action -eq "kl") {
+        Start-Process powershell.exe -ArgumentList "-File", "`"$PSCommandPath`"", "keys"
+        Set-Status "🔑 Key list opened in a new window." DarkGray
+        continue
+    }
+    if ($action -eq "ka") {
+        try { New-KeyPair } catch { Set-Status "❌ $($_.Exception.Message)" Red }
+        continue
     }
 
     if ($action -ne "connect") {
