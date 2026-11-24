@@ -548,6 +548,36 @@ function Edit-KeyComment {
     Set-Status "✅ Comment of $($key.Name) is now: $new.$note" Green
 }
 
+function Set-KeyPassphrase {
+    param($index, $key)
+    if (-not $key.HasPrivate) {
+        Set-Status "❌ $($key.Name): the private key isn't in $sshDir, so its passphrase can't be changed." Red
+        return
+    }
+    Write-Host "`n🔐 Change passphrase of key [$index] $($key.Name)" -ForegroundColor Cyan
+    Write-Host "   ssh-keygen will ask for the current passphrase (just Enter if it has none),"
+    Write-Host "   then the new one twice. Enter twice for no passphrase, but then anyone who"
+    Write-Host "   gets a copy of the file can use the key."
+    Write-Host "   Older-format keys (BEGIN RSA PRIVATE KEY) are saved in the newer OpenSSH"
+    Write-Host "   format; they work the same with ssh." -ForegroundColor DarkGray
+    if (-not (Confirm-YesNo "Continue? (y/N)")) {
+        Set-Status "Passphrase change cancelled." DarkGray
+        return
+    }
+    Write-Host ""
+    # ssh-keygen reads the passphrases itself, so they never pass through PowerShell.
+    & ssh-keygen -p -f $key.Private
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "`nPress Enter to continue..."
+        [void](Read-Host)
+        Set-Status "❌ Passphrase of $($key.Name) not changed (see ssh-keygen's message above). The key file is unchanged." Red
+        return
+    }
+    $note = ""
+    if ($key.Loaded) { $note = " ssh-agent keeps using the loaded copy; the next .\ssh.ps1 add asks for the new passphrase." }
+    Set-Status "✅ Passphrase of $($key.Name) changed.$note" Green
+}
+
 function Remove-Key {
     param($index, $key)
     Write-Host "`n🗑️  Delete key [$index] $($key.Name)?" -ForegroundColor Yellow
@@ -729,7 +759,7 @@ function Show-KeyManager {
             if (-not $k.HasPublic) { $flags += "no .pub file" }
             if ($flags.Count -gt 0) { Write-Host ("      {0}" -f ($flags -join ' · ')) -ForegroundColor DarkGray }
         }
-        Write-Host "`nAfter a number:  e edit comment   d delete   i install on a host" -ForegroundColor DarkGray
+        Write-Host "`nAfter a number:  e edit comment   p passphrase   d delete   i install on a host" -ForegroundColor DarkGray
         Write-Host "On its own:       ka add key   x close" -ForegroundColor DarkGray
         if ($StatusText) {
             Write-Host "`n$StatusText" -ForegroundColor $StatusColor
@@ -740,16 +770,17 @@ function Show-KeyManager {
         try {
             if ($choiceRaw -match '^x$') { return }
             elseif ($choiceRaw -match '^ka$') { New-KeyPair }
-            elseif ($choiceRaw -match '^(\d+)([edi])$') {
+            elseif ($choiceRaw -match '^(\d+)([edip])$') {
                 $n = [int]$Matches[1]
                 $op = $Matches[2].ToLower()
                 if ($n -ge $keys.Count) { Set-Status "❌ No key [$n]." Red }
                 elseif ($op -eq "e") { Edit-KeyComment $n $keys[$n] }
                 elseif ($op -eq "i") { Install-KeyOnChosenHost $keys[$n] }
+                elseif ($op -eq "p") { Set-KeyPassphrase $n $keys[$n] }
                 else { Remove-Key $n $keys[$n] }
             }
             elseif ($choiceRaw -ne "") {
-                Set-Status "❌ Invalid choice. Try e.g. 0e, 0d, 0i, ka or x." Red
+                Set-Status "❌ Invalid choice. Try e.g. 0e, 0p, 0d, 0i, ka or x." Red
             }
         } catch {
             Set-Status "❌ $($_.Exception.Message)" Red

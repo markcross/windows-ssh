@@ -85,7 +85,7 @@ Letters can be typed in either case (`6E`, `X`, `revert`), except that delete ne
 [4] id_ed25519_mdsp  ED25519 256  you@PC123 2026-11-24
       in key list · used by: cainsight
 
-After a number:  e edit comment   d delete   i install on a host
+After a number:  e edit comment   p passphrase   d delete   i install on a host
 On its own:       ka add key   x close
 
 ✅ Created id_ed25519_2026-11-24.
@@ -108,6 +108,7 @@ The line starting `✅` is the result of the last action (here, `ka` creating a 
 | Type | Does |
 |---|---|
 | `0e` | Edit key 0's comment |
+| `0p` | Change key 0's passphrase (also adds or removes one) |
 | `0d` | Delete key 0 (type `YES` in capitals to confirm; the files are moved to `.ssh\deleted\`, not erased) |
 | `0i` | Install key 0 on one of your menu hosts |
 | `ka` | Create a new key pair |
@@ -259,7 +260,8 @@ Windows uses the same file names as Linux: the private key has no extension (`id
 
 | Type | Does |
 |---|---|
-| `0e` | Edit key 0's comment (`ssh-keygen -c`; it may ask for the passphrase). Only works for keys in the newer OpenSSH format; very old RSA keys don't store a comment. |
+| `0e` | Edit key 0's comment (`ssh-keygen -c`; it may ask for the passphrase). Only works for keys in the newer OpenSSH format; very old RSA keys don't store a comment (changing the passphrase with `p` converts them, after which `e` works). |
+| `0p` | Change key 0's passphrase with `ssh-keygen -p`. It asks for the current passphrase (just Enter if the key has none, e.g. an AWS `.pem`), then the new one twice; Enter twice removes the passphrase. The passphrases go straight to `ssh-keygen`, never through the script. A wrong old passphrase leaves the file untouched. If the key is loaded in ssh-agent, the loaded copy keeps working; the next `.\ssh.ps1 add` asks for the new passphrase. Older-format keys (`BEGIN RSA PRIVATE KEY`) are saved in the newer OpenSSH format, which works the same with ssh. No backup copy is kept, because it would still open with the old passphrase. |
 | `0d` | Delete key 0. It shows which menu entries use it, then you must type `YES` in capitals. The key files are **moved** to `.ssh\deleted\<date_time>\` rather than erased, the key is removed from ssh-agent, and its line is removed from the key list in `ssh-config-menu`. |
 | `0i` | Install key 0 on one of your menu hosts (see below) |
 | `ka` | Add a key pair, as above |
