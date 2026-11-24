@@ -37,7 +37,7 @@ Then bring up the following:
 
 After a number:  e edit   + insert above   - insert below   d delete
                   < up   > down   , top   . bottom
-On its own:       x exit   REVERT undo last change
+On its own:       x exit   REVERT undo last change   ka add key   kl list keys
 
 Enter the number of your choice:
 ```
@@ -131,6 +131,8 @@ Type an entry's number followed by one of these (`REVERT` and `x` are typed on t
 | `6d` | Delete entry 6 (you must type `YES` in capitals to confirm) |
 | `REVERT` | Undo the last change (type it again to go back further) |
 | `x` | Exit the menu |
+| `ka` | Create a new key pair (see below) |
+| `kl` | Open the key list in a new window (see below) |
 
 The menu shows a reminder of these under the list, and a one-line result (e.g. `✅ Moved [6] to [0].`) after each action.
 
@@ -175,6 +177,40 @@ ssh-config-menu.bak.10   oldest
 
 Changes made in Notepad (the "Configure SSH Menu" option) aren't backed up.
 
+### Managing SSH keys: `ka` and `kl`
+
+**`ka`: add a key pair.** Asks for:
+- **Type:** `[1] ed25519` (default, recommended), `[2] ecdsa` or `[3] rsa`
+- **Length:** fixed at 256 for ed25519; 256 / 384 / 521 for ecdsa (default 256); 2048 / 3072 / 4096 for rsa (default 4096)
+- **Name:** default `id_<type>_<date>`, e.g. `id_ed25519_2026-11-24`. It must contain `id_` so the menu treats it as a key, and it can't already exist.
+- **Comment:** default `<username>@<computer> <date>`
+
+It then runs `ssh-keygen`, which asks for the passphrase. The new key is added to the key list in `ssh-config-menu` (with a backup first, so `REVERT` works), and the public key is shown and copied to the clipboard ready to paste into a server's `~/.ssh/authorized_keys`. Finally it offers to load the key into ssh-agent.
+
+Windows uses the same file names as Linux: the private key has no extension (`id_ed25519_work`) and the public key ends in `.pub` (`id_ed25519_work.pub`).
+
+**`kl`: list keys.** Opens a new window listing every key pair in your `.ssh` folder:
+
+```
+🔑 SSH keys in C:\Users\you\.ssh
+[0] id_ecdsa_2024-04-17  ED25519 256  you@example.com 2024-04-17
+      loaded in ssh-agent · in key list · used by: JumpBox, PRIMARY Bastion
+[1] id_ed25519_mdsp  ED25519 256  you@PC123 2026-11-24
+      in key list
+
+After a number:  e edit comment   d delete
+On its own:       ka add key   x close
+```
+
+| Type | Does |
+|---|---|
+| `0e` | Edit key 0's comment (`ssh-keygen -c`; it may ask for the passphrase). Only works for keys in the newer OpenSSH format; very old RSA keys don't store a comment. |
+| `0d` | Delete key 0. It shows which menu entries use it, then you must type `YES` in capitals. The key files are **moved** to `.ssh\deleted\<date_time>\` rather than erased, the key is removed from ssh-agent, and its line is removed from the key list in `ssh-config-menu`. |
+| `ka` | Add a key pair, as above |
+| `x` | Close the key window |
+
+You can also open the key window directly with `.\ssh.ps1 keys`.
+
 ## Installation
 
 Download and copy both the script "ssh.ps1" and skeleton "ssh-config-menu" to your %USERPROFILE% folder.
@@ -184,9 +220,11 @@ Remove my host line examples and define your own
 
 **How do I create key pairs in windows, example:**
 
-ssh-keygen -t ed25519 -f $env:USERPROFILE\.ssh\id_ecdsa_oracle_prod -C "your_email@example.com 2026-05-22"
+The easiest way is `ka` in the menu (see "Managing SSH keys" above). By hand:
 
-ssh-keygen -t ed25519 -f $env:USERPROFILE\.ssh\id_ecdsa_oracle_drc  -C "your_email@example.com 2026-05-22"
+ssh-keygen -t ed25519 -f $env:USERPROFILE\.ssh\id_ed25519_oracle_prod -C "your_email@example.com 2026-05-22"
+
+ssh-keygen -t ed25519 -f $env:USERPROFILE\.ssh\id_ed25519_oracle_drc  -C "your_email@example.com 2026-05-22"
 
 **Why not use windows built in .ssh\config as per Linux and also available to PowerShell**
 
