@@ -22,8 +22,12 @@ $sshDir = ""
 $privateKeys = @()
 $hosts = @()
 
-foreach ($lineRaw in Get-Content $ConfigFile) {
-    $line = $lineRaw.Trim()
+# Read the file ourselves (not Get-Content) so line numbers match exactly what
+# Save-ConfigLine writes back when an entry is edited.
+$configLines = [System.IO.File]::ReadAllText($ConfigFile) -split "`r?`n"
+
+for ($lineNo = 0; $lineNo -lt $configLines.Count; $lineNo++) {
+    $line = $configLines[$lineNo].Trim()
 
     if ($line -match '^\s*\.ssh\s*=\s*"(.*?)"') {
         $sshDir = $Matches[1] -replace '\$env:USERPROFILE', $env:USERPROFILE
@@ -33,7 +37,7 @@ foreach ($lineRaw in Get-Content $ConfigFile) {
         $privateKeys += $line
     }
     elseif ($line -ne "" -and $line -notmatch '^#' -and $line -match '^[^#]+(#[^#]+){3,4}$') {
-        $hosts += $line
+        $hosts += @{ Text = $line; LineNo = $lineNo }
     }
 }
 
@@ -94,8 +98,8 @@ Start-Sleep -Seconds 3
 function Build-MenuItems {
     param($hosts, $sshDir)
     $items = @()
-    foreach ($line in $hosts) {
-        $parts = $line -split '#'
+    for ($h = 0; $h -lt $hosts.Count; $h++) {
+        $parts = $hosts[$h].Text -split '#'
         if ($parts.Count -eq 4 -or $parts.Count -eq 5) {
             $folder = ""
             if ($parts.Count -eq 5) { $folder = $parts[4].Trim() }
@@ -106,10 +110,87 @@ function Build-MenuItems {
                 Keyname  = $parts[3]
                 KeyPath  = "$sshDir\$($parts[3])"
                 Folder   = $folder
+                HostIdx  = $h
             }
         }
     }
     return $items
+}
+
+# --- Edit an entry (menu "<n>m") ---
+function Save-ConfigLine {
+    param($path, $lineNo, $newText)
+    # Keep the file's BOM (or lack of one), line endings and every other line as-is.
+    $bytes = [System.IO.File]::ReadAllBytes($path)
+    $hasBom = $bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF
+    $text = [System.IO.File]::ReadAllText($path)
+    $nl = if ($text -match "`r`n") { "`r`n" } else { "`n" }
+    $lines = $text -split "`r?`n"
+    $lines[$lineNo] = $newText
+    Copy-Item $path "$path.bak" -Force
+    $encoding = New-Object System.Text.UTF8Encoding($hasBom)
+    [System.IO.File]::WriteAllText($path, ($lines -join $nl), $encoding)
+}
+
+function Read-Field {
+    param($label, $current, [switch]$AllowClear)
+    while ($true) {
+        $answer = Read-Host ("  {0,-8} [{1}]" -f $label, $current)
+        if ($null -eq $answer) { $answer = "" }
+        $answer = $answer.Trim()
+        if ($answer -eq "") { return $current }
+        if ($AllowClear -and $answer -eq "-") { return "" }
+        if ($answer -match '#') {
+            Write-Host "    ❌ '#' isn't allowed (it separates the fields). Try again." -ForegroundColor Red
+            continue
+        }
+        if ($AllowClear -and $answer -match '\s') {
+            Write-Host "    ❌ Folder can't contain spaces. Try again." -ForegroundColor Red
+            continue
+        }
+        return $answer
+    }
+}
+
+function Edit-MenuEntry {
+    param($index, $entry)
+    Write-Host ("`n✏️  Editing entry [{0}]  (press Enter to keep the current value)" -f $index) -ForegroundColor Cyan
+    Write-Host "    For Folder, type - to remove it.`n"
+
+    $alias    = Read-Field "Alias"    $entry.Alias
+    $hostName = Read-Field "Host"     $entry.Host
+    $userName = Read-Field "Username" $entry.Username
+    $keyName  = Read-Field "Key"      $entry.Keyname
+    $folder   = Read-Field "Folder"   $entry.Folder -AllowClear
+
+    if (-not (Test-Path "$sshDir\$keyName")) {
+        Write-Host "`n  ⚠️ Key file not found: $sshDir\$keyName" -ForegroundColor Yellow
+    }
+
+    $newLine = "$alias#$hostName#$userName#$keyName"
+    if ($folder) { $newLine += "#$folder" }
+    $oldLine = $hosts[$entry.HostIdx].Text
+
+    if ($newLine -eq $oldLine) {
+        Write-Host "`n  No changes made."
+        return
+    }
+
+    Write-Host "`n  Old: $oldLine"
+    Write-Host "  New: $newLine" -ForegroundColor Green
+    $confirm = Read-Host "`nSave? (y/N)"
+    if ($confirm -notmatch '^(y|yes)$') {
+        Write-Host "  Not saved."
+        return
+    }
+
+    try {
+        Save-ConfigLine $ConfigFile $hosts[$entry.HostIdx].LineNo $newLine
+        $hosts[$entry.HostIdx].Text = $newLine
+        Write-Host "✅ Saved. (Backup: $ConfigFile.bak)" -ForegroundColor Green
+    } catch {
+        Write-Host "❌ Couldn't save: $($_.Exception.Message)" -ForegroundColor Red
+    }
 }
 
 # --- Main menu loop ---
@@ -128,16 +209,37 @@ do {
     }
     Write-Host ("[{0}] Exit" -f $exitIndex)
     Write-Host ("[{0}] Configure SSH Menu (edit config file)" -f $configIndex)
+    Write-Host "`nTip: add m to edit an entry, e.g. 0m" -ForegroundColor DarkGray
 
+    $editMode = $false
     do {
-        $choiceRaw = Read-Host "`nEnter the number of your choice"
-        $isValid = $choiceRaw -match '^\d+$' -and [int]$choiceRaw -ge 0 -and [int]$choiceRaw -le $configIndex
-        if (-not $isValid) {
-            Write-Host "❌ Invalid choice. Please enter a number between 0 and $configIndex."
+        $choiceRaw = (Read-Host "`nEnter the number of your choice").Trim()
+        $isValid = $false
+        if ($choiceRaw -match '^(\d+)m$') {
+            $editMode = $true
+            $isValid = [int]$Matches[1] -lt $exitIndex
+            $choiceRaw = $Matches[1]
+            if (-not $isValid) {
+                Write-Host "❌ Only host entries can be edited: 0m to $($exitIndex - 1)m."
+            }
+        }
+        else {
+            $editMode = $false
+            $isValid = $choiceRaw -match '^\d+$' -and [int]$choiceRaw -ge 0 -and [int]$choiceRaw -le $configIndex
+            if (-not $isValid) {
+                Write-Host "❌ Invalid choice. Enter a number between 0 and $configIndex, or e.g. 0m to edit."
+            }
         }
     } while (-not $isValid)
 
     $choice = [int]$choiceRaw
+
+    if ($editMode) {
+        Edit-MenuEntry $choice $menuItems[$choice]
+        Write-Host "`nPress Enter to return to menu..."
+        [void][System.Console]::ReadLine()
+        continue
+    }
 
     if ($choice -eq $exitIndex) {
         Write-Host "`n👋 Exiting."
