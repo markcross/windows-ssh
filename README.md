@@ -69,7 +69,7 @@ bluebottle#bluebottle#mark#id_ecdsa_2024-04-17
 ## Explanation
 
 First line .ssh path if customised - define here.
-Lines before host definitions
+Lines before host definitions (a key line is any line with no `#` that contains `id_` or `.pem`, e.g. `id_ecdsa_2024-04-17`, `2013_id_rsa`, `aws.pem`)
 Checks if each private file(s) exist
 If exists and not already loaded, it runs ssh-add to cache the passphrase
 So this block is your “key list” that the script automatically feeds into ssh-agent
@@ -82,6 +82,34 @@ Host → hostname or IP you SSH to
 Username → username on the remote host
 Keyname → the key filename (must exist under the .ssh path define on your first line of ssh-config-menu )
 ```
+
+### Optional: start in a folder on the remote host
+
+Add a fifth field, "Alias#Host#Username#Keyname#Folder", and the menu will SSH in and `cd` to that folder in one step. Lines without it work exactly as before.
+
+```
+bluebottle#bluebottle#mark#id_ecdsa_2024-04-17#/var/www
+JumpBox#192.168.165.10#mark#id_ecdsa_2024-04-17
+```
+
+The folder shows in the menu after the host:
+
+```
+[0] mark@bluebottle:/var/www (bluebottle) [key: id_ecdsa_2024-04-17]
+[1] mark@192.168.165.10 (JumpBox) [key: id_ecdsa_2024-04-17]
+```
+
+Behind the scenes it runs:
+
+```
+ssh -t -i "<keypath>" mark@bluebottle 'cd /var/www && exec $SHELL -l'
+```
+
+- `-t` gives you a proper interactive terminal
+- `cd` changes folder; if the folder doesn't exist you'll see the error and the session closes, so typos are easy to spot
+- `exec $SHELL -l` starts your normal login shell (bash, zsh, ...), so `.bashrc` / `.profile` still load and `exit` closes the connection
+
+Notes: the folder can't contain spaces or a `#`. `~/projects` style paths work.
 
 ## Installation
 
@@ -103,6 +131,8 @@ It is way too complicated and easy to make a mistake and does not integrate "ssh
 **Why is 2013_id_rsa in the ssh-config-menu on the third line?**
 
 "Well cook me a kipper for breakfast", you are sharp! This was legacy but I thought I would leave it as a README comprehension test :-)
+
+It used to be silently ignored because it doesn't start with `id_`. Key lines now only need to contain `id_` (or `.pem`) anywhere, so it is loaded into ssh-agent like the others. Remove the line if you don't want it loaded.
 
 I hope you find this an absolute time saver and a putty buster. I have nothing against putty, I just hate having to use Windows.
 
