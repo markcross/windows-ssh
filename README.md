@@ -211,14 +211,14 @@ Enter the number of your choice: 6e
 ✏️  Editing entry [6]  (press Enter to keep the value shown)
     For Folder, type - to remove it.
 
-  Alias    [cainsight]:
-  Host     [mdsp]:
-  Username [cainsight]:
+  Alias    [cane]:
+  Host     [mdp]:
+  Username [cane]:
   Key      [id_ecdsa_btop_2024-04-17]:
-  Folder   [/u05/app/insight/tools/TytanCCSimulator/run/]: /u05/app/insight/logs
+  Folder   [/home/cane/bin]: /home/cane/logs
 
-  Old: cainsight#mdsp#cainsight#id_ecdsa_btop_2024-04-17#/u05/app/insight/tools/TytanCCSimulator/run/
-  New: cainsight#mdsp#cainsight#id_ecdsa_btop_2024-04-17#/u05/app/insight/logs
+  Old: cainsight#mdsp#cainsight#id_ecdsa_btop_2024-04-17#/home/cane/bin
+  New: cainsight#mdsp#cainsight#id_ecdsa_btop_2024-04-17#/home/cane/logs
 
 Save? (y/N): y
 ```
