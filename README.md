@@ -16,7 +16,11 @@ The the current Windows 11 OS then converts it to:
 
 **PS %USERPROFILE%> .\ssh.ps1**
 
-I just HIT return and running for the first time will cache your ssh key passphrases if required or subsequent runs it will show your cached keys. (Yes windows does this slightly differently)
+I just HIT return and it shows the keys currently cached in ssh-agent. To load the keys from your key list into ssh-agent (asking for each passphrase once), run it with `add` the first time, e.g. after a reboot:
+
+**PS %USERPROFILE%> .\ssh.ps1 add**
+
+(Yes windows does this slightly differently)
 
 ✅ Currently loaded SSH keys (via ssh-agent):
 
@@ -41,6 +45,48 @@ On its own:       x exit   REVERT undo last change   ka add key   kl list keys
 
 Enter the number of your choice:
 ```
+
+## Menu options at a glance
+
+### Main menu
+
+| Type | Does | Details |
+|---|---|---|
+| `6` | Connect to entry 6 (in a new window) | [Start in a folder](#optional-start-in-a-folder-on-the-remote-host) |
+| `6e` | Edit entry 6 | [Managing entries](#managing-entries-from-the-menu) |
+| `6+` | Insert a new entry above 6, then edit it | [Managing entries](#managing-entries-from-the-menu) |
+| `6-` | Insert a new entry below 6, then edit it | [Managing entries](#managing-entries-from-the-menu) |
+| `6<` | Move entry 6 up one place | [Managing entries](#managing-entries-from-the-menu) |
+| `6>` | Move entry 6 down one place | [Managing entries](#managing-entries-from-the-menu) |
+| `6,` | Move entry 6 to the top | [Managing entries](#managing-entries-from-the-menu) |
+| `6.` | Move entry 6 to the bottom | [Managing entries](#managing-entries-from-the-menu) |
+| `6d` | Delete entry 6 (type `YES` in capitals to confirm) | [Managing entries](#managing-entries-from-the-menu) |
+| `6i` | Install one of your public keys on entry 6's host | [Installing a public key](#installing-a-public-key-on-a-host) |
+| *Configure number* | Open `ssh-config-menu` in Notepad (the number straight after the last entry, `[5]` above) | |
+| `REVERT` | Undo the last change to `ssh-config-menu` (again to go further back) | [Backups and REVERT](#backups-and-revert) |
+| `ka` | Create a new key pair | [Managing SSH keys](#managing-ssh-keys-ka-and-kl) |
+| `kl` | Open the key list in a new window | [Managing SSH keys](#managing-ssh-keys-ka-and-kl) |
+| `x` | Exit | |
+
+Letters can be typed in either case (`6E`, `X`, `revert`), except that delete needs `YES` in capitals.
+
+### Key window (`kl`)
+
+| Type | Does |
+|---|---|
+| `0e` | Edit key 0's comment |
+| `0d` | Delete key 0 (type `YES` in capitals to confirm; the files are moved to `.ssh\deleted\`, not erased) |
+| `0i` | Install key 0 on one of your menu hosts |
+| `ka` | Create a new key pair |
+| `x` | Close the key window |
+
+### Command line
+
+| Run | Does |
+|---|---|
+| `.\ssh.ps1` | Show the loaded keys, then the menu |
+| `.\ssh.ps1 add` | First load every key in your key list into ssh-agent (asks each passphrase once), then the menu |
+| `.\ssh.ps1 keys` | Open the key window directly (what `kl` does) |
 
 ## ssh-config-menu
   
@@ -117,23 +163,7 @@ Notes: the remote login shell must be bash (zsh ignores `PROMPT_COMMAND`, so you
 
 ### Managing entries from the menu
 
-Type an entry's number followed by one of these (`REVERT` and `x` are typed on their own), then press Enter:
-
-| Type | Does |
-|---|---|
-| `6e` | Edit entry 6 |
-| `6+` | Insert a new entry above 6, then edit it |
-| `6-` | Insert a new entry below 6, then edit it |
-| `6<` | Move entry 6 up one place |
-| `6>` | Move entry 6 down one place |
-| `6,` | Move entry 6 to the top |
-| `6.` | Move entry 6 to the bottom |
-| `6d` | Delete entry 6 (you must type `YES` in capitals to confirm) |
-| `6i` | Install one of your public keys on entry 6's host (see "Installing a public key on a host" below) |
-| `REVERT` | Undo the last change (type it again to go back further) |
-| `x` | Exit the menu |
-| `ka` | Create a new key pair (see below) |
-| `kl` | Open the key list in a new window (see below) |
+Type an entry's number followed by an action letter or symbol, e.g. `6e`, `6+` or `6d`, then press Enter. The full list is in [Menu options at a glance](#menu-options-at-a-glance).
 
 The menu shows a reminder of these under the list, and a one-line result (e.g. `✅ Moved [6] to [0].`) after each action.
 
