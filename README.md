@@ -112,14 +112,30 @@ ssh -t -i "<keypath>" mark@bluebottle 'export PROMPT_COMMAND=''cd /var/www; unse
 
 Notes: the remote login shell must be bash (zsh ignores `PROMPT_COMMAND`, so you'd connect without changing folder). The folder can't contain spaces or a `#`. `~/projects` style paths work.
 
-### Editing an entry from the menu
+### Managing entries from the menu
 
-Type the entry's number followed by `m` (e.g. `6m`) and press Enter. You're shown each field with its current value: press Enter to keep it, or type a new value. For Folder, type `-` to remove it.
+Type an entry's number followed by one of these, then press Enter:
+
+| Type | Does |
+|---|---|
+| `6e` | Edit entry 6 |
+| `6+` | Insert a new entry above 6, then edit it |
+| `6-` | Insert a new entry below 6, then edit it |
+| `6<` | Move entry 6 up one place |
+| `6>` | Move entry 6 down one place |
+| `6,` | Move entry 6 to the top |
+| `6.` | Move entry 6 to the bottom |
+| `6d` | Delete entry 6 (you must type `YES` in capitals to confirm) |
+| `REVERT` | Undo the last change (type it again to go back further) |
+
+The menu shows a reminder of these under the list, and a one-line result (e.g. `✅ Moved [6] to [0].`) after each action.
+
+**Editing** shows each field with its current value: press Enter to keep it, or type a new value. For Folder, type `-` to remove it.
 
 ```
-Enter the number of your choice: 6m
+Enter the number of your choice: 6e
 
-✏️  Editing entry [6]  (press Enter to keep the current value)
+✏️  Editing entry [6]  (press Enter to keep the value shown)
     For Folder, type - to remove it.
 
   Alias    [cainsight]:
@@ -132,13 +148,28 @@ Enter the number of your choice: 6m
   New: cainsight#mdsp#cainsight#id_ecdsa_btop_2024-04-17#/u05/app/insight/logs
 
 Save? (y/N): y
-✅ Saved. (Backup: C:\Users\you\ssh-config-menu.bak)
 ```
 
-- Only that entry's line in `ssh-config-menu` is changed; key lines, other hosts and comments are left alone
-- The previous version is copied to `ssh-config-menu.bak` before saving
-- `#` isn't allowed in any field, and the folder can't contain spaces
-- You get a warning if the key file isn't in your `.ssh` folder
+**Inserting** works the same way. The new entry starts as a copy of the one you numbered, so usually only the alias and host need typing. Answer `n` at `Insert? (y/N)` and nothing is added. If the menu has no entries yet, `0+` adds the first one.
+
+**Moving** only reorders host lines. Key lines, comments and blank lines in `ssh-config-menu` stay where they are.
+
+**Checks:** `#` isn't allowed in any field, the folder can't contain spaces, and you get a warning if the key file isn't in your `.ssh` folder.
+
+#### Backups and REVERT
+
+Before every change, the current `ssh-config-menu` is copied to `ssh-config-menu.bak.1`. Older backups move up one (`.bak.1` → `.bak.2` … `.bak.9` → `.bak.10`), so the last 10 versions are kept:
+
+```
+ssh-config-menu.bak.1    newest
+ssh-config-menu.bak.2
+...
+ssh-config-menu.bak.10   oldest
+```
+
+`REVERT` shows when the newest backup was saved and asks `Revert? (y/N)`. It then restores `ssh-config-menu.bak.1` and moves the rest down one (`.bak.2` → `.bak.1` …), so typing `REVERT` again goes back another step. A revert can't itself be undone.
+
+Changes made in Notepad (the "Configure SSH Menu" option) aren't backed up.
 
 ## Installation
 
