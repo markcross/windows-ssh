@@ -112,6 +112,34 @@ ssh -t -i "<keypath>" mark@bluebottle 'export PROMPT_COMMAND=''cd /var/www; unse
 
 Notes: the remote login shell must be bash (zsh ignores `PROMPT_COMMAND`, so you'd connect without changing folder). The folder can't contain spaces or a `#`. `~/projects` style paths work.
 
+### Editing an entry from the menu
+
+Type the entry's number followed by `m` (e.g. `6m`) and press Enter. You're shown each field with its current value: press Enter to keep it, or type a new value. For Folder, type `-` to remove it.
+
+```
+Enter the number of your choice: 6m
+
+✏️  Editing entry [6]  (press Enter to keep the current value)
+    For Folder, type - to remove it.
+
+  Alias    [cainsight]:
+  Host     [mdsp]:
+  Username [cainsight]:
+  Key      [id_ecdsa_btop_2024-04-17]:
+  Folder   [/u05/app/insight/tools/TytanCCSimulator/run/]: /u05/app/insight/logs
+
+  Old: cainsight#mdsp#cainsight#id_ecdsa_btop_2024-04-17#/u05/app/insight/tools/TytanCCSimulator/run/
+  New: cainsight#mdsp#cainsight#id_ecdsa_btop_2024-04-17#/u05/app/insight/logs
+
+Save? (y/N): y
+✅ Saved. (Backup: C:\Users\you\ssh-config-menu.bak)
+```
+
+- Only that entry's line in `ssh-config-menu` is changed; key lines, other hosts and comments are left alone
+- The previous version is copied to `ssh-config-menu.bak` before saving
+- `#` isn't allowed in any field, and the folder can't contain spaces
+- You get a warning if the key file isn't in your `.ssh` folder
+
 ## Installation
 
 Download and copy both the script "ssh.ps1" and skeleton "ssh-config-menu" to your %USERPROFILE% folder.
