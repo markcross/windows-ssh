@@ -102,14 +102,15 @@ The folder shows in the menu after the host:
 Behind the scenes it runs:
 
 ```
-ssh -t -i "<keypath>" mark@bluebottle 'cd /var/www && exec $SHELL -l'
+ssh -t -i "<keypath>" mark@bluebottle 'export PROMPT_COMMAND=''cd /var/www; unset PROMPT_COMMAND''; exec $SHELL -l'
 ```
 
 - `-t` gives you a proper interactive terminal
-- `cd` changes folder; if the folder doesn't exist you'll see the error and the session closes, so typos are easy to spot
-- `exec $SHELL -l` starts your normal login shell (bash, zsh, ...), so `.bashrc` / `.profile` still load and `exit` closes the connection
+- `exec $SHELL -l` starts your normal login shell, so `.bash_profile` / `.bashrc` load as usual (environment, aliases) and `exit` closes the connection
+- `PROMPT_COMMAND` runs just before the first prompt, so the `cd` happens *after* your profile. This matters if your `.bash_profile` has its own `cd` (common on Oracle-style servers), which would otherwise move you straight back. It removes itself after running once.
+- If the folder doesn't exist you'll see a `cd` error and stay wherever your profile left you
 
-Notes: the folder can't contain spaces or a `#`. `~/projects` style paths work.
+Notes: the remote login shell must be bash (zsh ignores `PROMPT_COMMAND`, so you'd connect without changing folder). The folder can't contain spaces or a `#`. `~/projects` style paths work.
 
 ## Installation
 
