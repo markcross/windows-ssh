@@ -121,6 +121,8 @@ The line starting `✅` is the result of the last action (here, `ka` creating a 
 | `.\ssh.ps1 add` | First load every key in your key list into ssh-agent (asks each passphrase once), then the menu |
 | `.\ssh.ps1 keys` | Open the key window directly (what `kl` does) |
 
+Using an AWS `.pem` key? See [Using an AWS `.pem` key](#using-an-aws-pem-key) for the setup steps and fixes for common errors.
+
 ## ssh-config-menu
   
 The menu is then configured by a file called:
@@ -278,6 +280,68 @@ What happens:
 3. It tests signing in with the new key on its own. If that works and the menu entry uses a different key, it offers to switch the entry to the new key (with a backup, so `REVERT` works).
 
 This is the Windows equivalent of Linux's `ssh-copy-id`. The server needs a `sh`-compatible shell (bash, sh, ksh, zsh).
+
+## Using an AWS `.pem` key
+
+A `.pem` file from AWS is an ordinary private key with a different file extension, and the menu uses it like any other. AWS gives you only the private half; there's no `.pub` file.
+
+### Setup
+
+**1. Copy the `.pem` into your `.ssh` folder,** e.g. `C:\Users\you\.ssh\aws-prod.pem`. Keys are always looked up in the folder set on the `.ssh = ` line of `ssh-config-menu`.
+
+**2. Lock down its permissions.** Windows OpenSSH refuses a private key that other accounts can read, and a downloaded `.pem` usually can. You own the file, so this doesn't need admin rights:
+
+```
+icacls "$env:USERPROFILE\.ssh\aws-prod.pem" /inheritance:r
+icacls "$env:USERPROFILE\.ssh\aws-prod.pem" /grant:r "$($env:USERNAME):(R)"
+```
+
+The first command removes the inherited permissions; the second gives only you read access.
+
+**3. Add a menu entry** with `+` / `-` in the menu, or in `ssh-config-menu`:
+
+```
+AWS prod#ec2-12-34-56-78.eu-west-2.compute.amazonaws.com#ec2-user#aws-prod.pem
+```
+
+The username depends on the image the instance was built from:
+
+| Image (AMI) | Username |
+|---|---|
+| Amazon Linux, RHEL, Fedora | `ec2-user` |
+| Ubuntu | `ubuntu` |
+| Debian | `admin` |
+| CentOS | `centos` (or `ec2-user`) |
+| SUSE | `ec2-user` |
+
+**4. Optional: create the `.pub`,** so the key window (`kl`) can show the key's type and whether it's loaded, and so `i` can install it on other servers:
+
+```
+ssh-keygen -y -f "$env:USERPROFILE\.ssh\aws-prod.pem" | Set-Content -Encoding ascii "$env:USERPROFILE\.ssh\aws-prod.pem.pub"
+```
+
+Use `Set-Content -Encoding ascii`, not `>`. In Windows PowerShell, `>` writes UTF-16, which ssh tools can't read. Without the `.pub`, `kl` shows the key as `aws-prod.pem  ?` with `no .pub file`, which is harmless.
+
+**5. Optional: add it to the key list.** Put `aws-prod.pem` on its own line near the top of `ssh-config-menu`. Its name contains `.pem`, so the menu recognises it as a key, and `.\ssh.ps1 add` loads it into ssh-agent. AWS keys have no passphrase, so this step is optional.
+
+### Problem notes
+
+| You see | Cause | Fix |
+|---|---|---|
+| `WARNING: UNPROTECTED PRIVATE KEY FILE!` / `Permissions for '...pem' are too open` / `bad permissions` | Other accounts (often `Users` or `Authenticated Users`) can read the file | Step 2 above. Check with `icacls "$env:USERPROFILE\.ssh\aws-prod.pem"`: only your account should be listed. |
+| `Permission denied (publickey)` | Usually the wrong username for the AMI. Can also mean the wrong `.pem` for that instance (each instance is tied to the key pair chosen at launch). | Check the username table in step 3. In the AWS console, the instance's details show its **Key pair name**. |
+| `Load key "...pem": invalid format` | The file was damaged when it was copied, e.g. pasted into Notepad and saved as UTF-16, or the `-----BEGIN` / `-----END` lines lost | Download it again, or save it from Notepad with encoding **UTF-8** or **ANSI**. It must start with `-----BEGIN` and end with a newline after `-----END ... KEY-----`. |
+| `Connection timed out` | Nothing answered on port 22. Either the instance's **security group** doesn't allow ssh from your IP, or the **corporate firewall** blocks outgoing ssh. | Ask for port 22 to be opened from your office's public IP in the security group. Test from another network (e.g. a phone hotspot) to tell the two apart. Some companies only allow ssh through a bastion. |
+| `Connection refused` | The instance answered but sshd isn't running, or it's still booting | Wait a minute after start-up. Check the instance's system log in the AWS console. |
+| `Could not resolve hostname` | The public DNS name changed or is wrong. A stopped and restarted instance gets a **new public IP and DNS name** unless it has an Elastic IP. | Copy the current public DNS name or IP from the console and `6e` the entry. Ask for an Elastic IP if it changes often. |
+| `WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!` | The DNS name or IP now belongs to a different instance (after a rebuild, or IP reuse), whose host key is different from the one remembered | If you know the instance was replaced, remove the old entry with `ssh-keygen -R <host>`, then connect again and accept the new key. If you don't know why it changed, stop and check. This warning is also what an interception attack looks like. |
+| `Too many authentication failures` | ssh can try the keys in your ssh-agent before the `.pem`. With several keys loaded, the server gives up before reaching the right one (it allows about 6 tries). | Run `ssh -o IdentitiesOnly=yes -i "$env:USERPROFILE\.ssh\aws-prod.pem" ec2-user@<host>` to check the key itself works. Clearing ssh-agent with `ssh-add -D` also works (run `.\ssh.ps1 add` afterwards to reload your keys). |
+
+To see exactly where it fails, connect by hand with `-v` and look at the last few lines:
+
+```
+ssh -v -i "$env:USERPROFILE\.ssh\aws-prod.pem" ec2-user@<host>
+```
 
 ## Installation
 
