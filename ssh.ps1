@@ -157,10 +157,12 @@ do {
     $folder = $selected.Folder
 
     if ($folder) {
-        # -t forces an interactive terminal; cd to the folder, then replace the
-        # command with the user's normal login shell so 'exit' closes the session.
-        # `$SHELL is escaped so the remote server expands it, not PowerShell.
-        $sshCmd = "ssh -t -i `"$keyPath`" $user@$targetHost 'cd $folder && exec `$SHELL -l'"
+        # -t forces an interactive terminal. Start the user's normal login shell,
+        # and cd via bash's PROMPT_COMMAND, which runs just before the first prompt:
+        # after .bash_profile, so a 'cd' in the profile can't undo it, and aliases
+        # defined there still work. It removes itself after running once.
+        # '' is an escaped single quote; `$SHELL is expanded by the server, not PowerShell.
+        $sshCmd = "ssh -t -i `"$keyPath`" $user@$targetHost 'export PROMPT_COMMAND=''cd $folder; unset PROMPT_COMMAND''; exec `$SHELL -l'"
         Write-Host "`n🚀 Connecting to $user@$targetHost and changing to $folder"
     } else {
         $sshCmd = "ssh -i `"$keyPath`" $user@$targetHost"
