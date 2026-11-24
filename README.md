@@ -33,8 +33,11 @@ Then bring up the following:
 [2] mark@ezPR (PRIMARY Bastion) [key: id_ecdsa_2024-04-17]
 [3] mark@ezSEC (SECONDARY Bastion) [key: id_ecdsa_2024-04-17]
 [4] mark@bluebottle (bluebottle) [key: id_ecdsa_2024-04-17]
-[5] Exit
-[6] Configure SSH Menu (edit config file)
+[5] Configure SSH Menu (edit config file)
+
+After a number:  e edit   + insert above   - insert below   d delete
+                  < up   > down   , top   . bottom
+On its own:       x exit   REVERT undo last change
 
 Enter the number of your choice:
 ```
@@ -114,7 +117,7 @@ Notes: the remote login shell must be bash (zsh ignores `PROMPT_COMMAND`, so you
 
 ### Managing entries from the menu
 
-Type an entry's number followed by one of these, then press Enter:
+Type an entry's number followed by one of these (`REVERT` and `x` are typed on their own), then press Enter:
 
 | Type | Does |
 |---|---|
@@ -127,6 +130,7 @@ Type an entry's number followed by one of these, then press Enter:
 | `6.` | Move entry 6 to the bottom |
 | `6d` | Delete entry 6 (you must type `YES` in capitals to confirm) |
 | `REVERT` | Undo the last change (type it again to go back further) |
+| `x` | Exit the menu |
 
 The menu shows a reminder of these under the list, and a one-line result (e.g. `✅ Moved [6] to [0].`) after each action.
 
