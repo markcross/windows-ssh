@@ -83,6 +83,34 @@ Username → username on the remote host
 Keyname → the key filename (must exist under the .ssh path define on your first line of ssh-config-menu )
 ```
 
+### Optional: start in a folder on the remote host
+
+Add a fifth field, "Alias#Host#Username#Keyname#Folder", and the menu will SSH in and `cd` to that folder in one step. Lines without it work exactly as before.
+
+```
+bluebottle#bluebottle#mark#id_ecdsa_2024-04-17#/var/www
+JumpBox#192.168.165.10#mark#id_ecdsa_2024-04-17
+```
+
+The folder shows in the menu after the host:
+
+```
+[0] mark@bluebottle:/var/www (bluebottle) [key: id_ecdsa_2024-04-17]
+[1] mark@192.168.165.10 (JumpBox) [key: id_ecdsa_2024-04-17]
+```
+
+Behind the scenes it runs:
+
+```
+ssh -t -i "<keypath>" mark@bluebottle 'cd /var/www && exec $SHELL -l'
+```
+
+- `-t` gives you a proper interactive terminal
+- `cd` changes folder; if the folder doesn't exist you'll see the error and the session closes, so typos are easy to spot
+- `exec $SHELL -l` starts your normal login shell (bash, zsh, ...), so `.bashrc` / `.profile` still load and `exit` closes the connection
+
+Notes: the folder can't contain spaces or a `#`. `~/projects` style paths work.
+
 ## Installation
 
 Download and copy both the script "ssh.ps1" and skeleton "ssh-config-menu" to your %USERPROFILE% folder.

@@ -32,7 +32,7 @@ foreach ($lineRaw in Get-Content $ConfigFile) {
     elseif ($line -ne "" -and $line -notmatch '^#' -and ($line -match '\.pem' -or $line -match '^id_')) {
         $privateKeys += $line
     }
-    elseif ($line -ne "" -and $line -notmatch '^#' -and $line -match '^[^#]+#[^#]+#[^#]+#[^#]+$') {
+    elseif ($line -ne "" -and $line -notmatch '^#' -and $line -match '^[^#]+(#[^#]+){3,4}$') {
         $hosts += $line
     }
 }
@@ -96,13 +96,16 @@ function Build-MenuItems {
     $items = @()
     foreach ($line in $hosts) {
         $parts = $line -split '#'
-        if ($parts.Count -eq 4) {
+        if ($parts.Count -eq 4 -or $parts.Count -eq 5) {
+            $folder = ""
+            if ($parts.Count -eq 5) { $folder = $parts[4].Trim() }
             $items += @{
                 Alias    = $parts[0]
                 Host     = $parts[1]
                 Username = $parts[2]
                 Keyname  = $parts[3]
                 KeyPath  = "$sshDir\$($parts[3])"
+                Folder   = $folder
             }
         }
     }
@@ -119,7 +122,9 @@ do {
     Write-Host "`n📡 SSH Quick Connect Menu" -ForegroundColor Cyan
     for ($i = 0; $i -lt $menuItems.Count; $i++) {
         $entry = $menuItems[$i]
-        Write-Host ("[{0}] {1}@{2} ({3}) [key: {4}]" -f $i, $entry.Username, $entry.Host, $entry.Alias, $entry.Keyname)
+        $target = "{0}@{1}" -f $entry.Username, $entry.Host
+        if ($entry.Folder) { $target += ":" + $entry.Folder }
+        Write-Host ("[{0}] {1} ({2}) [key: {3}]" -f $i, $target, $entry.Alias, $entry.Keyname)
     }
     Write-Host ("[{0}] Exit" -f $exitIndex)
     Write-Host ("[{0}] Configure SSH Menu (edit config file)" -f $configIndex)
@@ -149,8 +154,18 @@ do {
     $user = $selected.Username
     $targetHost = $selected.Host
 
-    $sshCmd = "ssh -i `"$keyPath`" $user@$targetHost"
-    Write-Host "`n🚀 Connecting to $user@$targetHost"
+    $folder = $selected.Folder
+
+    if ($folder) {
+        # -t forces an interactive terminal; cd to the folder, then replace the
+        # command with the user's normal login shell so 'exit' closes the session.
+        # `$SHELL is escaped so the remote server expands it, not PowerShell.
+        $sshCmd = "ssh -t -i `"$keyPath`" $user@$targetHost 'cd $folder && exec `$SHELL -l'"
+        Write-Host "`n🚀 Connecting to $user@$targetHost and changing to $folder"
+    } else {
+        $sshCmd = "ssh -i `"$keyPath`" $user@$targetHost"
+        Write-Host "`n🚀 Connecting to $user@$targetHost"
+    }
     Write-Host "Running: $sshCmd"
 
     Start-Process powershell.exe -ArgumentList "-NoExit", "-Command", $sshCmd
