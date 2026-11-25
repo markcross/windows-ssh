@@ -911,7 +911,25 @@ function Copy-FromHost {
     $dest = Read-PathField "Destination" $defDest "e.g. Downloads/."
     $localDir = Resolve-LocalPath $dest
 
-    if (-not (Test-Path -LiteralPath $localDir)) {
+    # Remember what was typed even if the copy is then cancelled, so <n>c
+    # brings it back to correct.
+    if (-not $last) { $last = @{ PushSource = ""; PushDestination = "" } }
+    $last.Source = $source
+    $last.Destination = $dest
+    Save-ScpHistory $target $last
+
+    # Check step: show the full local path, where a folder typo shows up.
+    $newDir = -not (Test-Path -LiteralPath $localDir)
+    $note = if ($newDir) { "   (will be created)" } else { "" }
+    Write-Host "`n  Copy  $($target):$source"
+    Write-Host "  to    $localDir$note"
+    if (-not (Confirm-YesNo "Copy? (y/N)")) {
+        Set-Status "Copy cancelled. Nothing was copied or created; $($index)c brings your entries back to correct." DarkGray
+        return
+    }
+
+    # Only create the folder once the copy is confirmed.
+    if ($newDir) {
         New-Item -ItemType Directory -Path $localDir -Force | Out-Null
         Write-Host "  📁 Created $localDir"
     }
@@ -929,11 +947,6 @@ function Copy-FromHost {
     Write-Host "`n  Running: $cmdText`n" -ForegroundColor DarkGray
     & scp @scpArgs
     $code = $LASTEXITCODE
-
-    if (-not $last) { $last = @{ PushSource = ""; PushDestination = "" } }
-    $last.Source = $source
-    $last.Destination = $dest
-    Save-ScpHistory $target $last
 
     if ($code -ne 0) {
         Write-Host "`nPress Enter to continue..."
