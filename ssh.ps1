@@ -878,6 +878,9 @@ function Read-PathField {
     param($label, $default, $hint)
     while ($true) {
         $answer = (Read-Host ("  {0,-12} [{1}]" -f $label, $default)).Trim()
+        # A path pasted with Explorer's "Copy as path", or a file dragged into
+        # the window, arrives in quotes: drop them.
+        if ($answer -match '^"(.*)"$' -or $answer -match "^'(.*)'$") { $answer = $Matches[1] }
         if ($answer -eq "") { $answer = $default }
         if ($answer -eq "") {
             Write-Host "    ❌ $label is required. $hint" -ForegroundColor Red
@@ -885,6 +888,40 @@ function Read-PathField {
         }
         return $answer
     }
+}
+
+# When a local path doesn't exist, show what does: walk up to the nearest
+# folder that exists and list entries starting like the missing part (or,
+# without -CloseOnly, everything there if nothing starts like it).
+function Show-NearbyPaths {
+    param($path, [switch]$CloseOnly)
+    $parent = Split-Path -Path $path -Parent
+    $missing = Split-Path -Path $path -Leaf
+    while ($parent -and -not (Test-Path -LiteralPath $parent -PathType Container)) {
+        $missing = Split-Path -Path $parent -Leaf
+        $parent = Split-Path -Path $parent -Parent
+    }
+    if (-not $parent) { return }
+    $stem = $missing -replace '[*?\[\]].*$', ''
+    if ($stem.Length -gt 3) { $stem = $stem.Substring(0, 3) }
+    $all = @(Get-ChildItem -LiteralPath $parent -ErrorAction SilentlyContinue | Sort-Object Name)
+    $close = @()
+    if ($stem) { $close = @($all | Where-Object { $_.Name -like "$stem*" }) }
+    if ($close.Count -gt 0) {
+        $show = $close
+        $label = "Close matches in $parent"
+    } elseif (-not $CloseOnly -and $all.Count -gt 0) {
+        $show = $all
+        $label = "In $parent"
+    } else {
+        return
+    }
+    Write-Host "    $($label):" -ForegroundColor Yellow
+    foreach ($item in ($show | Select-Object -First 15)) {
+        if ($item.PSIsContainer) { Write-Host "      $($item.Name)\" -ForegroundColor Yellow }
+        else { Write-Host "      $($item.Name)" -ForegroundColor Yellow }
+    }
+    if ($show.Count -gt 15) { Write-Host "      ... and $($show.Count - 15) more" -ForegroundColor Yellow }
 }
 
 function Copy-FromHost {
@@ -899,16 +936,17 @@ function Copy-FromHost {
         $defDest = $last.Destination
     } else {
         $defSource = if ($entry.Folder) { ($entry.Folder.TrimEnd('/')) + "/*" } else { "" }
-        $defDest = "Downloads/."
+        $defDest = "Downloads\"
     }
 
     Write-Host "`n📥 Copy files from [$index] $target to this PC  (press Enter to accept the value shown)" -ForegroundColor Cyan
     Write-Host "   Source on the host: a file, a wildcard, or a folder ending in /" -ForegroundColor DarkGray
     Write-Host "     /home/user/thefile.txt    /home/user/*2026-11-01.log    /home/user/*    /home/user/logs/" -ForegroundColor DarkGray
-    Write-Host "   Destination: Downloads/... is your Downloads folder; other paths are relative to $env:USERPROFILE`n" -ForegroundColor DarkGray
+    Write-Host "   Destination on this PC: Downloads\... is your Downloads folder; other paths are relative to $env:USERPROFILE" -ForegroundColor DarkGray
+    Write-Host "     You can paste a path (Explorer: Shift+right-click, Copy as path) or drag a folder into this window.`n" -ForegroundColor DarkGray
 
     $source = Read-PathField "Source" $defSource "e.g. /home/user/*.log"
-    $dest = Read-PathField "Destination" $defDest "e.g. Downloads/."
+    $dest = Read-PathField "Destination" $defDest "e.g. Downloads\"
     $localDir = Resolve-LocalPath $dest
 
     # Remember what was typed even if the copy is then cancelled, so <n>c
@@ -923,6 +961,7 @@ function Copy-FromHost {
     $note = if ($newDir) { "   (will be created)" } else { "" }
     Write-Host "`n  Copy  $($target):$source"
     Write-Host "  to    $localDir$note"
+    if ($newDir) { Show-NearbyPaths $localDir -CloseOnly }
     if (-not (Confirm-YesNo "Copy? (y/N)")) {
         Set-Status "Copy cancelled. Nothing was copied or created; $($index)c brings your entries back to correct." DarkGray
         return
@@ -974,14 +1013,15 @@ function Send-ToHost {
     else { $defDest = "~/" }
 
     Write-Host "`n📤 Push files from this PC to [$index] $target  (press Enter to accept the value shown)" -ForegroundColor Cyan
-    Write-Host "   Source on this PC: a file, a wildcard, or a folder ending in /   (- to cancel)" -ForegroundColor DarkGray
-    Write-Host "     Downloads/report.txt    Downloads/*2026-11-01.log    Downloads/wiresharks/*    Downloads/wiresharks/" -ForegroundColor DarkGray
-    Write-Host "     Downloads/... is your Downloads folder; other paths are relative to $env:USERPROFILE" -ForegroundColor DarkGray
+    Write-Host "   Source on this PC: a file, a wildcard, or a folder ending in \   (- to cancel)" -ForegroundColor DarkGray
+    Write-Host "     Downloads\report.txt    Downloads\*2026-11-01.log    Downloads\wireshark\*    Downloads\wireshark\" -ForegroundColor DarkGray
+    Write-Host "     Downloads\... is your Downloads folder; other paths are relative to $env:USERPROFILE" -ForegroundColor DarkGray
+    Write-Host "     You can paste a path (Explorer: Shift+right-click, Copy as path) or drag a file into this window." -ForegroundColor DarkGray
     Write-Host "   Destination on the host: an existing folder, e.g. ~/ or /home/user/uploads/" -ForegroundColor DarkGray
     Write-Host "   Files with the same name on the host are overwritten.`n" -ForegroundColor DarkGray
 
     while ($true) {
-        $source = Read-PathField "Source" $defSource "e.g. Downloads/report.txt"
+        $source = Read-PathField "Source" $defSource "e.g. Downloads\report.txt"
         if ($source -eq "-") {
             Set-Status "Push cancelled." DarkGray
             return
@@ -992,18 +1032,19 @@ function Send-ToHost {
         $items = @()
         if ($recursive) {
             if (Test-Path -LiteralPath $localPath -PathType Container) { $items = @($localPath) }
-            else { Write-Host "    ❌ No folder $localPath" -ForegroundColor Red; continue }
+            else { Write-Host "    ❌ No folder $localPath" -ForegroundColor Red; Show-NearbyPaths $localPath; continue }
         } elseif ($localPath -match '[*?]') {
             # Windows doesn't expand wildcards for scp, so find the files here.
             $items = @(Get-ChildItem -Path $localPath -File -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })
         } elseif (Test-Path -LiteralPath $localPath -PathType Leaf) {
             $items = @($localPath)
         } elseif (Test-Path -LiteralPath $localPath -PathType Container) {
-            Write-Host "    ❌ $localPath is a folder: end it with / to send the whole folder, or add /* for just its files." -ForegroundColor Red
+            Write-Host "    ❌ $localPath is a folder: end it with \ to send the whole folder, or add \* for just its files." -ForegroundColor Red
             continue
         }
         if ($items.Count -eq 0) {
             Write-Host "    ❌ Nothing matches $localPath" -ForegroundColor Red
+            Show-NearbyPaths $localPath
             continue
         }
         break

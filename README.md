@@ -325,22 +325,23 @@ Enter the number of your choice: 6c
 📥 Copy files from [6] cane@mdp to this PC  (press Enter to accept the value shown)
    Source on the host: a file, a wildcard, or a folder ending in /
      /home/user/thefile.txt    /home/user/*2026-11-01.log    /home/user/*    /home/user/logs/
-   Destination: Downloads/... is your Downloads folder; other paths are relative to C:\Users\you
+   Destination on this PC: Downloads\... is your Downloads folder; other paths are relative to C:\Users\you
+     You can paste a path (Explorer: Shift+right-click, Copy as path) or drag a folder into this window.
 
   Source       [/home/cane/*2026-11-01.log]:
-  Destination  [Downloads/wiresharks/.]:
+  Destination  [Downloads\wireshark\]:
 
   Copy  cane@mdp:/home/cane/*2026-11-01.log
-  to    C:\Users\you\Downloads\wiresharks
+  to    C:\Users\you\Downloads\wireshark
 
 Copy? (y/N): y
 
-  Running: scp -i C:\Users\you\.ssh\id_ecdsa_btop_2024-04-17 cane@mdp:/home/cane/*2026-11-01.log C:\Users\you\Downloads\wiresharks
+  Running: scp -i C:\Users\you\.ssh\id_ecdsa_btop_2024-04-17 cane@mdp:/home/cane/*2026-11-01.log C:\Users\you\Downloads\wireshark
 
 app_2026-11-01.log                       100%   48KB   1.2MB/s   00:00
 db_2026-11-01.log                        100%  210KB   2.8MB/s   00:00
 
-Open C:\Users\you\Downloads\wiresharks in Explorer? (y/N):
+Open C:\Users\you\Downloads\wireshark in Explorer? (y/N):
 ```
 
 You're then back at the menu, with the copy and the scp command shown under it.
@@ -362,15 +363,14 @@ You're then back at the menu, with the copy and the scp command shown under it.
 
 | Type | Goes to |
 |---|---|
-| `Downloads/.` | Your Downloads folder (the default the first time) |
-| `Downloads/wiresharks/.` | `wiresharks` inside your Downloads folder |
-| `projects/logs` | `C:\Users\you\projects\logs` (other relative paths are relative to your profile folder) |
+| `Downloads\` | Your Downloads folder (the default the first time) |
+| `Downloads\wireshark\` | `wireshark` inside your Downloads folder |
+| `projects\logs` | `C:\Users\you\projects\logs` (other relative paths are relative to your profile folder) |
 | `C:\temp\logs` | That exact folder |
 
 - `Downloads` means your real Downloads folder, looked up from Windows, so it's still right if it has been moved (e.g. to OneDrive).
-- The trailing `/.` ("into this folder") is optional.
-- `/` and `\` both work.
-- The folder is created if it doesn't exist, but only after you answer `y` at `Copy?`.
+- The trailing `\` is optional, and `/` works too (`Downloads/wireshark/.` is the same folder).
+- The folder is created if it doesn't exist, but only after you answer `y` at `Copy?`. When it would be created, the check also lists any similar folder names that do exist, so `wiresharks` vs `wireshark` is easy to spot.
 - Files with the same name are overwritten.
 
 **Remembered values** are stored per `user@host` in `%USERPROFILE%\ssh-config-menu.scp`, one line per host, shared with `p` (`user@host#copySource#copyDestination#pushSource#pushDestination`). Any `#` in a path is stored as `%23` and `%` as `%25`, so they can't break the line format. They're saved even when a copy fails, so you can correct a typo and try again. Delete the file to forget them all.
@@ -388,43 +388,56 @@ You're then back at the menu, with the copy and the scp command shown under it.
 Enter the number of your choice: 6p
 
 📤 Push files from this PC to [6] cane@mdp  (press Enter to accept the value shown)
-   Source on this PC: a file, a wildcard, or a folder ending in /   (- to cancel)
-     Downloads/report.txt    Downloads/*2026-11-01.log    Downloads/wiresharks/*    Downloads/wiresharks/
-     Downloads/... is your Downloads folder; other paths are relative to C:\Users\you
+   Source on this PC: a file, a wildcard, or a folder ending in \   (- to cancel)
+     Downloads\report.txt    Downloads\*2026-11-01.log    Downloads\wireshark\*    Downloads\wireshark\
+     Downloads\... is your Downloads folder; other paths are relative to C:\Users\you
+     You can paste a path (Explorer: Shift+right-click, Copy as path) or drag a file into this window.
    Destination on the host: an existing folder, e.g. ~/ or /home/user/uploads/
    Files with the same name on the host are overwritten.
 
-  Source       [Downloads/wiresharks/*.pcap]:
+  Source       [Downloads\wireshark\*.pcap]:
   Destination  [/home/cane/bin/]:
 
   Sending 2 file(s):
-    C:\Users\you\Downloads\wiresharks\capture1.pcap
-    C:\Users\you\Downloads\wiresharks\capture2.pcap
+    C:\Users\you\Downloads\wireshark\capture1.pcap
+    C:\Users\you\Downloads\wireshark\capture2.pcap
 
 Send to cane@mdp:/home/cane/bin/? (y/N): y
 
-  Running: scp -i C:\Users\you\.ssh\id_ecdsa_btop_2024-04-17 C:\Users\you\Downloads\wiresharks\capture1.pcap C:\Users\you\Downloads\wiresharks\capture2.pcap cane@mdp:/home/cane/bin/
+  Running: scp -i C:\Users\you\.ssh\id_ecdsa_btop_2024-04-17 C:\Users\you\Downloads\wireshark\capture1.pcap C:\Users\you\Downloads\wireshark\capture2.pcap cane@mdp:/home/cane/bin/
 
 capture1.pcap                            100%  1.2MB   3.1MB/s   00:00
 capture2.pcap                            100%  860KB   2.9MB/s   00:00
 ```
 
-**Source** (on this PC). Paths work the same way as `6c`'s destination: `Downloads/...` is your real Downloads folder, other relative paths are relative to your profile folder, and full paths like `C:\temp\x.log` are used as they are.
+**Source** (on this PC). Paths work the same way as `6c`'s destination: `Downloads\...` is your real Downloads folder, other relative paths are relative to your profile folder, and full paths like `C:\temp\x.log` are used as they are.
 
 | Type | Sends |
 |---|---|
-| `Downloads/report.txt` | That one file |
-| `Downloads/*2026-11-01.log` | Every file matching the wildcard |
-| `Downloads/wiresharks/*` | Every file in the folder; subfolders are skipped |
-| `Downloads/wiresharks/` | The whole `wiresharks` folder, including subfolders (a trailing `/` sends recursively) |
+| `Downloads\report.txt` | That one file |
+| `Downloads\*2026-11-01.log` | Every file matching the wildcard |
+| `Downloads\wireshark\*` | Every file in the folder; subfolders are skipped |
+| `Downloads\wireshark\` | The whole `wireshark` folder, including subfolders (a trailing `\` sends recursively) |
 
-Windows doesn't expand wildcards for scp, so the menu finds the matching files itself and lists them, showing the first 10 if there are more. You're then asked `Send to ...? (y/N)`. If nothing matches, it says so and asks for the source again; type `-` to cancel.
+`/` works as well as `\` in all of these.
+
+Windows doesn't expand wildcards for scp, so the menu finds the matching files itself and lists them, showing the first 10 if there are more. You're then asked `Send to ...? (y/N)`. If nothing matches, it says so, lists what *is* there, and asks for the source again; type `-` to cancel:
+
+```
+  Source       []: Downloads\wiresharks\port53070_2026-02-16_222322_test.pcap
+    ❌ Nothing matches C:\Users\you\Downloads\wiresharks\port53070_2026-02-16_222322_test.pcap
+    Close matches in C:\Users\you\Downloads:
+      wireshark\
+```
+
+It walks up to the nearest folder that exists and shows the names starting like the part that's missing. If none do, it lists everything in that folder.
 
 There's no default source the first time, so pressing Enter can never upload a whole folder by accident.
 
 **Destination** (on the host): a folder that already exists. It defaults to the last one you used, or the first time to the entry's start folder (or `~/` if it has none).
 
 **Notes:**
+- **No tab completion.** The prompts can't offer it on locked-down PowerShell (Constrained Language Mode). Instead, paste a path: in Explorer, Shift+right-click a file and choose **Copy as path**, or drag the file into the window. The quotes Windows adds are removed automatically. This works at every copy and push prompt.
 - Files with the same name on the host are overwritten without asking.
 - If the destination folder doesn't exist, scp reports an error. Create it with an ssh session first.
 - Spaces and `#` are fine in both paths, as with `6c`.
