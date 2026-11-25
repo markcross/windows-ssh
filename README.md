@@ -40,8 +40,9 @@ Then brings up the following:
 [4] mark@bluebottle (bluebottle) [key: id_ecdsa_2024-04-17]
 [5] Configure SSH Menu (edit config file)
 
-After a number:  e edit   + insert above   - insert below   d delete   c copy files
-                  < up   > down   , top   . bottom   i install a key on this host
+After a number:  e edit   + insert above   - insert below   d delete
+                  < up   > down   , top   . bottom
+                  c copy from host   p push to host   i install a key on this host
 On its own:       x exit   REVERT undo last change   ka add key   kl list keys
 
 Enter the number of your choice:
@@ -64,6 +65,7 @@ Enter the number of your choice:
 | `6d` | Delete entry 6 (type `YES` in capitals to confirm) | [Managing entries](#managing-entries-from-the-menu) |
 | `6i` | Install one of your public keys on entry 6's host | [Installing a public key](#installing-a-public-key-on-a-host) |
 | `6c` | Copy files from entry 6's host to this PC (scp) | [Copying files](#copying-files-from-a-host-scp) |
+| `6p` | Push files from this PC to entry 6's host (scp) | [Pushing files](#pushing-files-to-a-host-scp) |
 | *Configure number* | Open `ssh-config-menu` in Notepad (the number straight after the last entry, `[5]` above) | |
 | `REVERT` | Undo the last change to `ssh-config-menu` (again to go further back) | [Backups and REVERT](#backups-and-revert) |
 | `ka` | Create a new key pair | [Managing SSH keys](#managing-ssh-keys-ka-and-kl) |
@@ -336,12 +338,62 @@ You're then back at the menu, with the copy and the scp command shown under it.
 - The folder is created if it doesn't exist.
 - Files with the same name are overwritten.
 
-**Remembered values** are stored per `user@host` in `%USERPROFILE%\ssh-config-menu.scp`, one line per host (`user@host#source#destination`). Any `#` in a path is stored as `%23` and `%` as `%25`, so they can't break the line format. They're saved even when a copy fails, so you can correct a typo and try again. Delete the file to forget them all.
+**Remembered values** are stored per `user@host` in `%USERPROFILE%\ssh-config-menu.scp`, one line per host, shared with `p` (`user@host#copySource#copyDestination#pushSource#pushDestination`). Any `#` in a path is stored as `%23` and `%` as `%25`, so they can't break the line format. They're saved even when a copy fails, so you can correct a typo and try again. Delete the file to forget them all.
 
 **Notes:**
 - It signs in with the entry's key, like connecting does. A password or passphrase prompt appears in the menu window.
 - Paths can contain spaces, `#`, quotes and brackets. Type them plainly, without quotes or backslashes. For the source, the menu escapes them for the server itself, leaving `*`, `?` and `[ ]` working as wildcards.
 - If scp reports an error (e.g. no files matched the wildcard), the menu pauses so you can read it.
+
+### Pushing files to a host (scp)
+
+`6p` is the reverse of `6c`: it sends files **from** this PC **to** entry 6's host. The source and destination are again pre-filled with what you last used for that host:
+
+```
+Enter the number of your choice: 6p
+
+📤 Push files from this PC to [6] cane@mdp  (press Enter to accept the value shown)
+   Source on this PC: a file, a wildcard, or a folder ending in /   (- to cancel)
+     Downloads/report.txt    Downloads/*2026-11-01.log    Downloads/wiresharks/*    Downloads/wiresharks/
+     Downloads/... is your Downloads folder; other paths are relative to C:\Users\you
+   Destination on the host: an existing folder, e.g. ~/ or /home/user/uploads/
+   Files with the same name on the host are overwritten.
+
+  Source       [Downloads/wiresharks/*.pcap]:
+  Destination  [/home/cane/bin/]:
+
+  Sending 2 file(s):
+    C:\Users\you\Downloads\wiresharks\capture1.pcap
+    C:\Users\you\Downloads\wiresharks\capture2.pcap
+
+Send to cane@mdp:/home/cane/bin/? (y/N): y
+
+  Running: scp -i C:\Users\you\.ssh\id_ecdsa_btop_2024-04-17 C:\Users\you\Downloads\wiresharks\capture1.pcap C:\Users\you\Downloads\wiresharks\capture2.pcap cane@mdp:/home/cane/bin/
+
+capture1.pcap                            100%  1.2MB   3.1MB/s   00:00
+capture2.pcap                            100%  860KB   2.9MB/s   00:00
+```
+
+**Source** (on this PC). Paths work the same way as `6c`'s destination: `Downloads/...` is your real Downloads folder, other relative paths are relative to your profile folder, and full paths like `C:\temp\x.log` are used as they are.
+
+| Type | Sends |
+|---|---|
+| `Downloads/report.txt` | That one file |
+| `Downloads/*2026-11-01.log` | Every file matching the wildcard |
+| `Downloads/wiresharks/*` | Every file in the folder; subfolders are skipped |
+| `Downloads/wiresharks/` | The whole `wiresharks` folder, including subfolders (a trailing `/` sends recursively) |
+
+Windows doesn't expand wildcards for scp, so the menu finds the matching files itself and lists them, showing the first 10 if there are more. You're then asked `Send to ...? (y/N)`. If nothing matches, it says so and asks for the source again; type `-` to cancel.
+
+There's no default source the first time, so pressing Enter can never upload a whole folder by accident.
+
+**Destination** (on the host): a folder that already exists. It defaults to the last one you used, or the first time to the entry's start folder (or `~/` if it has none).
+
+**Notes:**
+- Files with the same name on the host are overwritten without asking.
+- If the destination folder doesn't exist, scp reports an error. Create it with an ssh session first.
+- Spaces and `#` are fine in both paths, as with `6c`.
+- The result appears under the menu: `📤 Sent 2 file(s) to cane@mdp:/home/cane/bin/` plus the scp command. With more than 3 files, the command is shortened to `<N files>`.
 
 ## Using an AWS `.pem` key
 
