@@ -1,10 +1,10 @@
 # windows-ssh
-Powershell menu system for managing ssh connections in a corporate environment not requiring administrator access - "Can't install putty..."
+Powershell menu system for managing ssh connections in a corporate environment not requiring administrator access with scp built in. Putty not required.
 
 ## windows-ssh
 AI tells me it is a "Windows-native interactive SSH orchestrator" inspired by OpenSSH config + agent + CLI launchers"
 
-I hope it is a complete key management toolset to create, manage ssh keys, ssh-agent management, ssh into machines and cd into a destination folder of your choice. It replaces putty and puttygen and uses native windows tools, negating forward upgrading concerns for putty security issues like CVE-2024-31497, as this will be maintained by windows update.
+I hope it is a complete key management toolset to create, manage ssh keys, ssh-agent management, ssh into machines; cd into a destination folder of your choice and scp files. It replaces putty and puttygen and uses native windows tools, negating forward upgrading concerns for putty security issues like CVE-2024-31497, as this will be maintained by windows update.
 It works for me in a extremely locked down corporate user profile environment after a few workarounds. Bonus, it also manages AWS .pem files, allowing you to add a passphrase were there never was one issued by Amazon at EC2 creation time for example.
 
 In your %USERPROFILE% I created a file called "ssh.ps1". The script was built up over time and polished by various AI coding sessions, as agentic coding is surely the way forwards?
