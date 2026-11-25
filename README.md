@@ -32,7 +32,7 @@ I just HIT return and it shows the keys currently cached in ssh-agent. To load t
 Then brings up the following:
 
 ```
-📡 SSH Quick Connect Menu v0.19
+📡 SSH Quick Connect Menu v0.20
 [0] mark.cross@ezPR (Bastion as mark.cross) [key: id_ecdsa_2024-04-17]
 [1] mark@192.168.165.10 (JumpBox) [key: id_ecdsa_2024-04-17]
 [2] mark@ezPR (PRIMARY Bastion) [key: id_ecdsa_2024-04-17]
@@ -145,7 +145,7 @@ Using an AWS `.pem` key? See [Using an AWS `.pem` key](#using-an-aws-pem-key) fo
 
 ### Version number
 
-The menu title shows the version, e.g. `SSH Quick Connect Menu v0.19`. The number after `0.` is the pull request that last changed `ssh.ps1`, so it tells you which change your copy includes. Compare it with the [pull requests](https://github.com/markcross/windows-ssh/pulls?q=is%3Apr+is%3Amerged) to see what's new since.
+The menu title shows the version, e.g. `SSH Quick Connect Menu v0.20`. The number after `0.` is the pull request that last changed `ssh.ps1`, so it tells you which change your copy includes. Compare it with the [pull requests](https://github.com/markcross/windows-ssh/pulls?q=is%3Apr+is%3Amerged) to see what's new since.
 
 ### Files the menu uses
 
@@ -262,6 +262,18 @@ Save? (y/N): y
 **Inserting** works the same way. The new entry starts as a copy of the one you numbered, so usually only the alias and host need typing. Answer `n` at `Insert? (y/N)` and nothing is added. If the menu has no entries yet, `0+` adds the first one.
 
 **Moving** only reorders host lines. Key lines, comments and blank lines in `ssh-config-menu` stay where they are.
+
+**Separator lines:** give an entry an alias starting with `-----` to draw a line across the menu, e.g. to group your hosts. Only the alias is asked for; the other fields are filled with `-`. The line is as wide as the longest entry, and anything after the dashes is kept as a label:
+
+```
+[0] mark.cross@ezPR (Bastion as mark.cross) [key: id_ecdsa_2024-04-17]
+[1] -----------------------------------------------------------------
+[2] mark@192.168.165.10 (JumpBox) [key: id_ecdsa_2024-04-17]
+[3] ----- Production ------------------------------------------------
+[4] mark@ezPR (PRIMARY Bastion) [key: id_ecdsa_2024-04-17]
+```
+
+In `ssh-config-menu` these are lines like `-----#-#-#-` or `----- Production#-#-#-`. A separator keeps its number, so you can edit, move or delete it like any entry (`1e`, `1<`, `1d`). Choosing it, or using `c`, `p` or `i` on it, just says it's a separator. Separators aren't offered as hosts when installing a key.
 
 **Checks:** `#` isn't allowed in any field, the folder can't contain spaces, and you get a warning if the key file isn't in your `.ssh` folder.
 

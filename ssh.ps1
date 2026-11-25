@@ -6,7 +6,7 @@
 
 # Version shown in the menu title: 0.<number of the pull request that last
 # changed this script>, so you can tell which change your copy includes.
-$Version = "0.19"
+$Version = "0.20"
 
 $ConfigFile = "$env:USERPROFILE\ssh-config-menu"
 
@@ -182,6 +182,8 @@ function Build-MenuItems {
                 KeyPath  = "$sshDir\$($parts[3])"
                 Folder   = $folder
                 HostIdx  = $h
+                # An alias starting with ----- makes this entry a separator line
+                IsSeparator = ($parts[0] -match '^-----')
             }
         }
     }
@@ -237,6 +239,12 @@ function Read-EntryFields {
     Write-Host "    For Folder, type - to remove it.`n"
 
     $alias    = Read-Field "Alias"    $start.Alias
+    if ($alias -match '^-----') {
+        # Separator line: the other fields aren't used, so fill them with "-"
+        # to keep the line in the Alias#Host#Username#Keyname format.
+        Write-Host "    Alias starts with ----- so this is a separator line; no other fields needed." -ForegroundColor DarkGray
+        return "$alias#-#-#-"
+    }
     $hostName = Read-Field "Host"     $start.Host
     $userName = Read-Field "Username" $start.Username
     $keyName  = Read-Field "Key"      $start.Keyname
@@ -714,14 +722,23 @@ function Install-KeyOnChosenHost {
         Set-Status "❌ There are no menu entries to install on." Red
         return
     }
+    # Separator lines aren't hosts: leave them out, remembering each host's
+    # menu number for the messages.
     $labels = @()
-    foreach ($e in $entries) { $labels += (Get-HostLabel $e) }
+    $choices = @()
+    $menuNumbers = @()
+    for ($n = 0; $n -lt $entries.Count; $n++) {
+        if ($entries[$n].IsSeparator) { continue }
+        $labels += (Get-HostLabel $entries[$n])
+        $choices += $entries[$n]
+        $menuNumbers += $n
+    }
     $pick = Select-FromList "📤 Install $($key.Name).pub on which host?" $labels
     if ($pick -lt 0) {
         Set-Status "Install cancelled." DarkGray
         return
     }
-    Install-PublicKey $key $entries[$pick] $pick
+    Install-PublicKey $key $choices[$pick] $menuNumbers[$pick]
 }
 
 # Pick a key from the .ssh folder, then install it on menu entry $index.
@@ -1125,11 +1142,32 @@ do {
         Write-Host "⚠️ No host entries found in $ConfigFile" -ForegroundColor Yellow
         Write-Host "   Expected lines like: Alias#Host#Username#Keyname[#Folder]  (0+ adds one)" -ForegroundColor Yellow
     }
+    # Build the entry lines first, so separator lines can be drawn as wide as
+    # the longest entry.
+    $lines = @()
+    $width = 0
     for ($i = 0; $i -lt $menuItems.Count; $i++) {
         $entry = $menuItems[$i]
         $target = "{0}@{1}" -f $entry.Username, $entry.Host
         if ($entry.Folder) { $target += ":" + $entry.Folder }
-        Write-Host ("[{0}] {1} ({2}) [key: {3}]" -f $i, $target, $entry.Alias, $entry.Keyname)
+        $line = "[{0}] {1} ({2}) [key: {3}]" -f $i, $target, $entry.Alias, $entry.Keyname
+        $lines += $line
+        if (-not $entry.IsSeparator -and $line.Length -gt $width) { $width = $line.Length }
+    }
+    if ($width -lt 40) { $width = 40 }
+    for ($i = 0; $i -lt $menuItems.Count; $i++) {
+        $entry = $menuItems[$i]
+        if ($entry.IsSeparator) {
+            # "-----" alone is all dashes; "----- Production" keeps its label.
+            $label = $entry.Alias.Trim()
+            $sep = "[$i] "
+            if ($label -match '[^-]') { $sep += "$label " }
+            $pad = $width - $sep.Length
+            if ($pad -gt 0) { $sep += ("-" * $pad) }
+            Write-Host $sep -ForegroundColor DarkGray
+        } else {
+            Write-Host $lines[$i]
+        }
     }
     Write-Host ("[{0}] Configure SSH Menu (edit config file)" -f $configIndex)
     Write-Host "`nAfter a number:  e edit   + insert above   - insert below   d delete" -ForegroundColor DarkGray
@@ -1199,6 +1237,10 @@ do {
             $choice = [int]$choiceRaw
             if ($menuItems.Count -gt 0) { $entry = $menuItems[$choice] }
         }
+        if ($entry -and $entry.IsSeparator -and ($action -eq "c" -or $action -eq "p" -or $action -eq "i")) {
+            Set-Status "[$choice] is a separator line, not a host." DarkGray
+            continue
+        }
         try {
             switch ($action) {
                 "revert" { Restore-Config }
@@ -1229,6 +1271,10 @@ do {
     }
 
     $selected = $menuItems[$choice]
+    if ($selected.IsSeparator) {
+        Set-Status "[$choice] is a separator line, not a host." DarkGray
+        continue
+    }
     $keyPath = $selected.KeyPath
     $user = $selected.Username
     $targetHost = $selected.Host
