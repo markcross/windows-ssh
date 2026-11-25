@@ -82,8 +82,8 @@ Letters can be typed in either case (`6E`, `X`, `revert`), except that delete ne
       loaded in ssh-agent · in key list · used by: Bastion as mark.cross, JumpBox, PRIMARY Bastion, SECONDARY Bastion, bluebottle
 [3] id_ed25519_2026-11-24  ED25519 256  you@PC123 2026-11-24
       loaded in ssh-agent · in key list
-[4] id_ed25519_mdsp  ED25519 256  you@PC123 2026-11-24
-      in key list · used by: cainsight
+[4] id_ed25519_mdp  ED25519 256  you@PC123 2026-11-24
+      in key list · used by: cane
 
 After a number:  e edit comment   p passphrase   d delete   i install on a host
 On its own:       ka add key   x close
