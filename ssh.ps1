@@ -4,6 +4,10 @@
 #   wt.exe powershell -NoExit -File "C:\Users\mark.cross\ssh.ps1"
 #   doesn't work
 
+# Version shown in the menu title: 0.<number of the pull request that last
+# changed this script>, so you can tell which change your copy includes.
+$Version = "0.19"
+
 $ConfigFile = "$env:USERPROFILE\ssh-config-menu"
 
 # --- Detect if we should add keys ---
@@ -1116,7 +1120,7 @@ do {
     $hostCount = $menuItems.Count
     $configIndex = $hostCount  # Configure comes straight after the hosts (x exits)
 
-    Write-Host "`n📡 SSH Quick Connect Menu" -ForegroundColor Cyan
+    Write-Host "`n📡 SSH Quick Connect Menu v$Version" -ForegroundColor Cyan
     if ($menuItems.Count -eq 0) {
         Write-Host "⚠️ No host entries found in $ConfigFile" -ForegroundColor Yellow
         Write-Host "   Expected lines like: Alias#Host#Username#Keyname[#Folder]  (0+ adds one)" -ForegroundColor Yellow

@@ -32,7 +32,7 @@ I just HIT return and it shows the keys currently cached in ssh-agent. To load t
 Then brings up the following:
 
 ```
-📡 SSH Quick Connect Menu
+📡 SSH Quick Connect Menu v0.19
 [0] mark.cross@ezPR (Bastion as mark.cross) [key: id_ecdsa_2024-04-17]
 [1] mark@192.168.165.10 (JumpBox) [key: id_ecdsa_2024-04-17]
 [2] mark@ezPR (PRIMARY Bastion) [key: id_ecdsa_2024-04-17]
@@ -142,6 +142,10 @@ The line starting `✅` is the result of the last action (here, `ka` creating a 
 | `.\ssh.ps1 keys` | Open the key window directly (what `kl` does) |
 
 Using an AWS `.pem` key? See [Using an AWS `.pem` key](#using-an-aws-pem-key) for the setup steps and fixes for common errors.
+
+### Version number
+
+The menu title shows the version, e.g. `SSH Quick Connect Menu v0.19`. The number after `0.` is the pull request that last changed `ssh.ps1`, so it tells you which change your copy includes. Compare it with the [pull requests](https://github.com/markcross/windows-ssh/pulls?q=is%3Apr+is%3Amerged) to see what's new since.
 
 ### Files the menu uses
 
