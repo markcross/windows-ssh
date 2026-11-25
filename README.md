@@ -2,11 +2,12 @@
 Powershell menu system for managing ssh connections in a corporate environment not requiring administrator access - "Can't install putty..."
 
 ## windows-ssh
-Powershell menu system for managing ssh connections in a corporate environment not requiring administrator access - "Can't install putty..."
-
 AI tells me it is a "Windows-native interactive SSH orchestrator" inspired by OpenSSH config + agent + CLI launchers"
 
-In your %USERPROFILE% I have created a file called "ssh.ps1"
+I hope it is a complete key management toolset to create, manage ssh keys, ssh-agent management, ssh into machines and cd into a destination folder of your choice. It replaces putty and puttygen and uses native windows tools, negating forward upgrading concerns for putty security issues like CVE-2024-31497, as this will be maintained by windows update.
+It works for me in a extremely locked down corporate user profile environment after a few workarounds. Bonus, it also manages AWS .pem files, allowing you to add a passphrase were there never was one issued by Amazon at EC2 creation time for example.
+
+In your %USERPROFILE% I created a file called "ssh.ps1". The script was built up over time and polished by various AI coding sessions, as agentic coding is surely the way forwards?
 
 When I run a PowerShell icon from my task bar it comes up in my %USERPROFILE% so can now run the script linux style:
 
@@ -28,7 +29,7 @@ I just HIT return and it shows the keys currently cached in ssh-agent. To load t
   
   • ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIh7Z9FmwxpB8DW2pQ72q/daWXQiC1rJjSQdSe8OQ3iR your_email@example.com 2026-05-22
   
-Then bring up the following:
+Then brings up the following:
 
 ```
 📡 SSH Quick Connect Menu
