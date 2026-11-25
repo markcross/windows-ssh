@@ -794,8 +794,10 @@ if ($KeyMode) {
 }
 
 # --- Copy files from a host with scp (main menu <n>c) ---
-# The last source and destination used for each user@host are remembered in
-# ssh-config-menu.scp, one line per host:  user@host#source#destination
+# The last paths used for each user@host are remembered in ssh-config-menu.scp,
+# one line per host:
+#   user@host#copySource#copyDestination#pushSource#pushDestination
+# (lines from before push existed have just the first three fields).
 # '#' and '%' inside the paths are stored URL-style as %23 and %25, so paths
 # can contain them (and spaces) without breaking the line format.
 $ScpHistoryFile = "$ConfigFile.scp"
@@ -823,11 +825,12 @@ function Get-DownloadsFolder {
     return "$env:USERPROFILE\Downloads"
 }
 
-# "Downloads\..." -> the real Downloads folder; other relative paths are
-# relative to the user profile; full paths (C:\..., \\server\...) are kept.
-function Resolve-LocalDestination {
-    param($dest)
-    $d = $dest -replace '/', '\'
+# A path on this PC: "Downloads\..." -> the real Downloads folder; other
+# relative paths are relative to the user profile; full paths (C:\...,
+# \\server\...) are kept. Used for copy destinations and push sources.
+function Resolve-LocalPath {
+    param($path)
+    $d = $path -replace '/', '\'
     $d = $d -replace '\\\.$', ''          # "folder\." means "into folder"
     if ($d -match '^(?i)downloads(\\|$)') {
         $d = (Get-DownloadsFolder) + $d.Substring(9)
@@ -842,8 +845,16 @@ function Get-ScpHistory {
     if (Test-Path -LiteralPath $ScpHistoryFile) {
         foreach ($l in @(Get-Content -LiteralPath $ScpHistoryFile)) {
             $parts = $l -split '#'
-            if ($parts.Count -eq 3 -and $parts[0] -eq $target) {
-                return @{ Source = (ConvertFrom-HistoryField $parts[1]); Destination = (ConvertFrom-HistoryField $parts[2]) }
+            if (($parts.Count -eq 3 -or $parts.Count -eq 5) -and $parts[0] -eq $target) {
+                $rec = @{
+                    Source = (ConvertFrom-HistoryField $parts[1]); Destination = (ConvertFrom-HistoryField $parts[2])
+                    PushSource = ""; PushDestination = ""
+                }
+                if ($parts.Count -eq 5) {
+                    $rec.PushSource = ConvertFrom-HistoryField $parts[3]
+                    $rec.PushDestination = ConvertFrom-HistoryField $parts[4]
+                }
+                return $rec
             }
         }
     }
@@ -851,14 +862,15 @@ function Get-ScpHistory {
 }
 
 function Save-ScpHistory {
-    param($target, $source, $destination)
+    param($target, $rec)
     $out = @()
     if (Test-Path -LiteralPath $ScpHistoryFile) {
         foreach ($l in @(Get-Content -LiteralPath $ScpHistoryFile)) {
             if (($l -split '#')[0] -ne $target) { $out += $l }
         }
     }
-    $out += "$target#$(ConvertTo-HistoryField $source)#$(ConvertTo-HistoryField $destination)"
+    $fields = @($rec.Source, $rec.Destination, $rec.PushSource, $rec.PushDestination) | ForEach-Object { ConvertTo-HistoryField "$_" }
+    $out += "$target#" + ($fields -join '#')
     Set-Content -LiteralPath $ScpHistoryFile -Value $out
 }
 
@@ -897,7 +909,7 @@ function Copy-FromHost {
 
     $source = Read-PathField "Source" $defSource "e.g. /home/user/*.log"
     $dest = Read-PathField "Destination" $defDest "e.g. Downloads/."
-    $localDir = Resolve-LocalDestination $dest
+    $localDir = Resolve-LocalPath $dest
 
     if (-not (Test-Path -LiteralPath $localDir)) {
         New-Item -ItemType Directory -Path $localDir -Force | Out-Null
@@ -918,7 +930,10 @@ function Copy-FromHost {
     & scp @scpArgs
     $code = $LASTEXITCODE
 
-    Save-ScpHistory $target $source $dest
+    if (-not $last) { $last = @{ PushSource = ""; PushDestination = "" } }
+    $last.Source = $source
+    $last.Destination = $dest
+    Save-ScpHistory $target $last
 
     if ($code -ne 0) {
         Write-Host "`nPress Enter to continue..."
@@ -930,6 +945,96 @@ function Copy-FromHost {
         Start-Process explorer.exe $localDir
     }
     Set-Status "📥 Copied $($target):$source to $localDir`nRunning: $cmdText" Cyan
+}
+
+# --- Push files from this PC to a host with scp (main menu <n>p) ---
+function Send-ToHost {
+    param($index, $entry)
+    $target = "$($entry.Username)@$($entry.Host)"
+    $rec = Get-ScpHistory $target
+    if (-not $rec) { $rec = @{ Source = ""; Destination = ""; PushSource = ""; PushDestination = "" } }
+
+    # No first-time source default: pressing Enter must never upload a whole folder.
+    $defSource = $rec.PushSource
+    if ($rec.PushDestination) { $defDest = $rec.PushDestination }
+    elseif ($entry.Folder) { $defDest = ($entry.Folder.TrimEnd('/')) + "/" }
+    else { $defDest = "~/" }
+
+    Write-Host "`n📤 Push files from this PC to [$index] $target  (press Enter to accept the value shown)" -ForegroundColor Cyan
+    Write-Host "   Source on this PC: a file, a wildcard, or a folder ending in /   (- to cancel)" -ForegroundColor DarkGray
+    Write-Host "     Downloads/report.txt    Downloads/*2026-11-01.log    Downloads/wiresharks/*    Downloads/wiresharks/" -ForegroundColor DarkGray
+    Write-Host "     Downloads/... is your Downloads folder; other paths are relative to $env:USERPROFILE" -ForegroundColor DarkGray
+    Write-Host "   Destination on the host: an existing folder, e.g. ~/ or /home/user/uploads/" -ForegroundColor DarkGray
+    Write-Host "   Files with the same name on the host are overwritten.`n" -ForegroundColor DarkGray
+
+    while ($true) {
+        $source = Read-PathField "Source" $defSource "e.g. Downloads/report.txt"
+        if ($source -eq "-") {
+            Set-Status "Push cancelled." DarkGray
+            return
+        }
+        $defSource = $source
+        $recursive = $source -match '[\\/]$'
+        $localPath = Resolve-LocalPath $source
+        $items = @()
+        if ($recursive) {
+            if (Test-Path -LiteralPath $localPath -PathType Container) { $items = @($localPath) }
+            else { Write-Host "    ❌ No folder $localPath" -ForegroundColor Red; continue }
+        } elseif ($localPath -match '[*?]') {
+            # Windows doesn't expand wildcards for scp, so find the files here.
+            $items = @(Get-ChildItem -Path $localPath -File -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })
+        } elseif (Test-Path -LiteralPath $localPath -PathType Leaf) {
+            $items = @($localPath)
+        } elseif (Test-Path -LiteralPath $localPath -PathType Container) {
+            Write-Host "    ❌ $localPath is a folder: end it with / to send the whole folder, or add /* for just its files." -ForegroundColor Red
+            continue
+        }
+        if ($items.Count -eq 0) {
+            Write-Host "    ❌ Nothing matches $localPath" -ForegroundColor Red
+            continue
+        }
+        break
+    }
+    $dest = Read-PathField "Destination" $defDest "e.g. ~/"
+
+    if ($recursive) {
+        Write-Host "`n  Sending the folder $localPath (with subfolders)"
+    } else {
+        Write-Host "`n  Sending $($items.Count) file(s):"
+        $items | Select-Object -First 10 | ForEach-Object { Write-Host "    $_" }
+        if ($items.Count -gt 10) { Write-Host "    ... and $($items.Count - 10) more" }
+    }
+    if (-not (Confirm-YesNo "Send to $($target):$($dest)? (y/N)")) {
+        Set-Status "Push cancelled." DarkGray
+        return
+    }
+
+    $scpArgs = @("-i", $entry.KeyPath)
+    if ($recursive) { $scpArgs += "-r" }
+    $scpArgs += $items
+    $scpArgs += "$($target):$(ConvertTo-ScpRemotePath $dest)"
+    if ($items.Count -gt 3) {
+        $cmdText = "scp -i $($entry.KeyPath) <$($items.Count) files> $($target):$dest"
+    } else {
+        $cmdText = "scp " + (($scpArgs | ForEach-Object { if ($_ -match '\s') { "`"$_`"" } else { $_ } }) -join ' ')
+    }
+
+    Write-Host "`n  Running: $cmdText`n" -ForegroundColor DarkGray
+    & scp @scpArgs
+    $code = $LASTEXITCODE
+
+    $rec.PushSource = $source
+    $rec.PushDestination = $dest
+    Save-ScpHistory $target $rec
+
+    if ($code -ne 0) {
+        Write-Host "`nPress Enter to continue..."
+        [void](Read-Host)
+        Set-Status "❌ scp reported a problem (exit code $code). See its messages above. Does the folder exist on the host?`nRunning: $cmdText" Red
+        return
+    }
+    $what = if ($recursive) { "the folder $localPath" } else { "$($items.Count) file(s)" }
+    Set-Status "📤 Sent $what to $($target):$dest`nRunning: $cmdText" Cyan
 }
 
 # --- Main menu loop ---
@@ -952,8 +1057,9 @@ do {
         Write-Host ("[{0}] {1} ({2}) [key: {3}]" -f $i, $target, $entry.Alias, $entry.Keyname)
     }
     Write-Host ("[{0}] Configure SSH Menu (edit config file)" -f $configIndex)
-    Write-Host "`nAfter a number:  e edit   + insert above   - insert below   d delete   c copy files" -ForegroundColor DarkGray
-    Write-Host "                  < up   > down   , top   . bottom   i install a key on this host" -ForegroundColor DarkGray
+    Write-Host "`nAfter a number:  e edit   + insert above   - insert below   d delete" -ForegroundColor DarkGray
+    Write-Host "                  < up   > down   , top   . bottom" -ForegroundColor DarkGray
+    Write-Host "                  c copy from host   p push to host   i install a key on this host" -ForegroundColor DarkGray
     Write-Host "On its own:       x exit   REVERT undo last change   ka add key   kl list keys" -ForegroundColor DarkGray
     if ($StatusText) {
         Write-Host "`n$StatusText" -ForegroundColor $StatusColor
@@ -976,7 +1082,7 @@ do {
             $action = "revert"
             $isValid = $true
         }
-        elseif ($choiceRaw -match '^(\d+)([e+\-<>,.dic])$') {
+        elseif ($choiceRaw -match '^(\d+)([e+\-<>,.dicp])$') {
             $action = $Matches[2].ToLower()
             $choiceRaw = $Matches[1]
             $n = [int]$choiceRaw
@@ -1027,6 +1133,7 @@ do {
                 "d"      { Remove-Entry $choice $entry }
                 "i"      { Install-ChosenKeyOnHost $choice $entry }
                 "c"      { Copy-FromHost $choice $entry }
+                "p"      { Send-ToHost $choice $entry }
                 "<"      { Move-Entry $choice ($choice - 1) }
                 ">"      { Move-Entry $choice ($choice + 1) }
                 ","      { Move-Entry $choice 0 }
