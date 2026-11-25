@@ -920,18 +920,18 @@ do {
         # defined there still work. It removes itself after running once.
         # '' is an escaped single quote; `$SHELL is expanded by the server, not PowerShell.
         $sshCmd = "ssh -t -i `"$keyPath`" $user@$targetHost 'export PROMPT_COMMAND=''cd $folder; unset PROMPT_COMMAND''; exec `$SHELL -l'"
-        Write-Host "`n🚀 Connecting to $user@$targetHost and changing to $folder"
+        $connectMsg = "🚀 Opened a new window connecting to $user@$targetHost and changing to $folder"
     } else {
         $sshCmd = "ssh -i `"$keyPath`" $user@$targetHost"
-        Write-Host "`n🚀 Connecting to $user@$targetHost"
+        $connectMsg = "🚀 Opened a new window connecting to $user@$targetHost"
     }
-    Write-Host "Running: $sshCmd"
 
     Start-Process powershell.exe -ArgumentList "-NoExit", "-Command", $sshCmd
 	# Start-Process wt.exe -ArgumentList "new-tab", "powershell", "-NoExit", "-Command", $sshCmd  # Didn't work to spawn to a tab instead of new window
     
-    Write-Host "`nPress Enter to return to menu..."
-    [void](Read-Host)
+    # No pause: the menu redraws straight away with the command shown under it,
+    # ready for the next choice.
+    Set-Status "$connectMsg`nRunning: $sshCmd" Cyan
 } while ($true)
 
 # I'm currently using Windows Terminal to front WSL 2 Ubuntu. I use it to SSH out to multiple servers.

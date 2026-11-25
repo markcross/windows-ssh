@@ -52,7 +52,7 @@ Enter the number of your choice:
 
 | Type | Does | Details |
 |---|---|---|
-| `6` | Connect to entry 6 (in a new window) | [Start in a folder](#optional-start-in-a-folder-on-the-remote-host) |
+| `6` | Connect to entry 6 in a new window. The menu stays ready for your next choice, with the ssh command it ran shown underneath | [Start in a folder](#optional-start-in-a-folder-on-the-remote-host) |
 | `6e` | Edit entry 6 | [Managing entries](#managing-entries-from-the-menu) |
 | `6+` | Insert a new entry above 6, then edit it | [Managing entries](#managing-entries-from-the-menu) |
 | `6-` | Insert a new entry below 6, then edit it | [Managing entries](#managing-entries-from-the-menu) |
