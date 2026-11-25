@@ -893,18 +893,36 @@ function Read-PathField {
 # When a local path doesn't exist, show what does: walk up to the nearest
 # folder that exists and list entries starting like the missing part (or,
 # without -CloseOnly, everything there if nothing starts like it).
+# Each suggestion is the path as typed with the missing part swapped for a
+# real name, so it can be copied and pasted straight back in.
 function Show-NearbyPaths {
-    param($path, [switch]$CloseOnly)
+    param($path, $typed, [switch]$CloseOnly)
     $parent = Split-Path -Path $path -Parent
     $missing = Split-Path -Path $path -Leaf
+    $rest = ""          # what was typed after the missing part, e.g. "\*"
     while ($parent -and -not (Test-Path -LiteralPath $parent -PathType Container)) {
+        $rest = "\$missing$rest"
         $missing = Split-Path -Path $parent -Leaf
         $parent = Split-Path -Path $parent -Parent
     }
     if (-not $parent) { return }
+
+    # The typed path up to the missing part, in the user's own form
+    # ("Downloads\..." rather than C:\Users\...). Slashes become backslashes;
+    # a trailing "\." or "\" is kept so the suggestion means the same thing.
+    $t = $typed -replace '/', '\'
+    $trail = ""
+    if ($t -match '\\\.$') { $t = $t.Substring(0, $t.Length - 2); $trail = "\." }
+    elseif ($t.EndsWith('\')) { $t = $t.TrimEnd('\'); $trail = "\" }
+    $segs = @($t -split '\\')
+    $tail = 1 + @(($rest -split '\\') | Where-Object { $_ -ne "" }).Count
+    $prefix = ""
+    if ($segs.Count -gt $tail) { $prefix = (($segs | Select-Object -First ($segs.Count - $tail)) -join '\') + '\' }
+
     $stem = $missing -replace '[*?\[\]].*$', ''
     if ($stem.Length -gt 3) { $stem = $stem.Substring(0, 3) }
     $all = @(Get-ChildItem -LiteralPath $parent -ErrorAction SilentlyContinue | Sort-Object Name)
+    if ($rest) { $all = @($all | Where-Object { $_.PSIsContainer }) }   # more path follows: folders only
     $close = @()
     if ($stem) { $close = @($all | Where-Object { $_.Name -like "$stem*" }) }
     if ($close.Count -gt 0) {
@@ -918,8 +936,7 @@ function Show-NearbyPaths {
     }
     Write-Host "    $($label):" -ForegroundColor Yellow
     foreach ($item in ($show | Select-Object -First 15)) {
-        if ($item.PSIsContainer) { Write-Host "      $($item.Name)\" -ForegroundColor Yellow }
-        else { Write-Host "      $($item.Name)" -ForegroundColor Yellow }
+        Write-Host "      $prefix$($item.Name)$rest$trail" -ForegroundColor Yellow
     }
     if ($show.Count -gt 15) { Write-Host "      ... and $($show.Count - 15) more" -ForegroundColor Yellow }
 }
@@ -961,7 +978,7 @@ function Copy-FromHost {
     $note = if ($newDir) { "   (will be created)" } else { "" }
     Write-Host "`n  Copy  $($target):$source"
     Write-Host "  to    $localDir$note"
-    if ($newDir) { Show-NearbyPaths $localDir -CloseOnly }
+    if ($newDir) { Show-NearbyPaths $localDir $dest -CloseOnly }
     if (-not (Confirm-YesNo "Copy? (y/N)")) {
         Set-Status "Copy cancelled. Nothing was copied or created; $($index)c brings your entries back to correct." DarkGray
         return
@@ -1032,7 +1049,7 @@ function Send-ToHost {
         $items = @()
         if ($recursive) {
             if (Test-Path -LiteralPath $localPath -PathType Container) { $items = @($localPath) }
-            else { Write-Host "    ❌ No folder $localPath" -ForegroundColor Red; Show-NearbyPaths $localPath; continue }
+            else { Write-Host "    ❌ No folder $localPath" -ForegroundColor Red; Show-NearbyPaths $localPath $source; continue }
         } elseif ($localPath -match '[*?]') {
             # Windows doesn't expand wildcards for scp, so find the files here.
             $items = @(Get-ChildItem -Path $localPath -File -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })
@@ -1044,7 +1061,7 @@ function Send-ToHost {
         }
         if ($items.Count -eq 0) {
             Write-Host "    ❌ Nothing matches $localPath" -ForegroundColor Red
-            Show-NearbyPaths $localPath
+            Show-NearbyPaths $localPath $source
             continue
         }
         break

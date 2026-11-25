@@ -370,7 +370,7 @@ You're then back at the menu, with the copy and the scp command shown under it.
 
 - `Downloads` means your real Downloads folder, looked up from Windows, so it's still right if it has been moved (e.g. to OneDrive).
 - The trailing `\` is optional, and `/` works too (`Downloads/wireshark/.` is the same folder).
-- The folder is created if it doesn't exist, but only after you answer `y` at `Copy?`. When it would be created, the check also lists any similar folder names that do exist, so `wiresharks` vs `wireshark` is easy to spot.
+- The folder is created if it doesn't exist, but only after you answer `y` at `Copy?`. When it would be created, the check also lists similar folders that do exist, as ready-to-paste paths (e.g. `Downloads\wireshark\` for `Downloads\wiresharks\`), so the typo is easy to spot and fix with `n` then `6c`.
 - Files with the same name are overwritten.
 
 **Remembered values** are stored per `user@host` in `%USERPROFILE%\ssh-config-menu.scp`, one line per host, shared with `p` (`user@host#copySource#copyDestination#pushSource#pushDestination`). Any `#` in a path is stored as `%23` and `%` as `%25`, so they can't break the line format. They're saved even when a copy fails, so you can correct a typo and try again. Delete the file to forget them all.
@@ -424,13 +424,14 @@ capture2.pcap                            100%  860KB   2.9MB/s   00:00
 Windows doesn't expand wildcards for scp, so the menu finds the matching files itself and lists them, showing the first 10 if there are more. You're then asked `Send to ...? (y/N)`. If nothing matches, it says so, lists what *is* there, and asks for the source again; type `-` to cancel:
 
 ```
-  Source       []: Downloads\wiresharks\port53070_2026-02-16_222322_test.pcap
-    ❌ Nothing matches C:\Users\you\Downloads\wiresharks\port53070_2026-02-16_222322_test.pcap
+  Source       []: Downloads\wiresh\*
+    ❌ Nothing matches C:\Users\you\Downloads\wiresh\*
     Close matches in C:\Users\you\Downloads:
-      wireshark\
+      Downloads\wireshark\*
+  Source       [Downloads\wiresh\*]: Downloads\wireshark\*
 ```
 
-It walks up to the nearest folder that exists and shows the names starting like the part that's missing. If none do, it lists everything in that folder.
+It walks up to the nearest folder that exists and finds the names starting like the part that's missing. If none do, it lists everything in that folder. Each suggestion is **your path with the wrong part corrected**, in the form you typed it, so you can copy it and paste it straight back in. The rest of what you typed is kept: here `\*` (just the files), not a trailing `\`, which would send the whole folder.
 
 There's no default source the first time, so pressing Enter can never upload a whole folder by accident.
 
