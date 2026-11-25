@@ -330,6 +330,11 @@ Enter the number of your choice: 6c
   Source       [/home/cane/*2026-11-01.log]:
   Destination  [Downloads/wiresharks/.]:
 
+  Copy  cane@mdp:/home/cane/*2026-11-01.log
+  to    C:\Users\you\Downloads\wiresharks
+
+Copy? (y/N): y
+
   Running: scp -i C:\Users\you\.ssh\id_ecdsa_btop_2024-04-17 cane@mdp:/home/cane/*2026-11-01.log C:\Users\you\Downloads\wiresharks
 
 app_2026-11-01.log                       100%   48KB   1.2MB/s   00:00
@@ -339,6 +344,8 @@ Open C:\Users\you\Downloads\wiresharks in Explorer? (y/N):
 ```
 
 You're then back at the menu, with the copy and the scp command shown under it.
+
+**Made a mistake?** The `Copy? (y/N)` check shows the full local folder, which is where a typo shows up (`(will be created)` after it means the folder doesn't exist yet). Answer `n`, or just press Enter, and you're back at the menu with nothing copied and no folder created. What you typed is still remembered, so `6c` brings it back for you to correct.
 
 **Source** (on the host):
 
@@ -363,7 +370,7 @@ You're then back at the menu, with the copy and the scp command shown under it.
 - `Downloads` means your real Downloads folder, looked up from Windows, so it's still right if it has been moved (e.g. to OneDrive).
 - The trailing `/.` ("into this folder") is optional.
 - `/` and `\` both work.
-- The folder is created if it doesn't exist.
+- The folder is created if it doesn't exist, but only after you answer `y` at `Copy?`.
 - Files with the same name are overwritten.
 
 **Remembered values** are stored per `user@host` in `%USERPROFILE%\ssh-config-menu.scp`, one line per host, shared with `p` (`user@host#copySource#copyDestination#pushSource#pushDestination`). Any `#` in a path is stored as `%23` and `%` as `%25`, so they can't break the line format. They're saved even when a copy fails, so you can correct a typo and try again. Delete the file to forget them all.
