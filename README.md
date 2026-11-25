@@ -74,6 +74,19 @@ Enter the number of your choice:
 
 Letters can be typed in either case (`6E`, `X`, `revert`), except that delete needs `YES` in capitals.
 
+After an action, the menu redraws straight away with the result underneath, e.g. `✅ Moved [6] to [0].` For a connect, copy or push, the ssh or scp command it ran is shown too:
+
+```
+[5] Configure SSH Menu (edit config file)
+...
+🚀 Opened a new window connecting to mark@bluebottle
+Running: ssh -i "C:\Users\you\.ssh\id_ecdsa_2024-04-17" mark@bluebottle
+
+Enter the number of your choice:
+```
+
+The result disappears at the next redraw.
+
 ### Key window (`kl`)
 
 ```
@@ -118,6 +131,8 @@ The line starting `✅` is the result of the last action (here, `ka` creating a 
 | `ka` | Create a new key pair |
 | `x` | Close the key window |
 
+`p` means **passphrase** here, but **push** in the main menu. The two windows each have their own letters, and numbers here are key numbers, not menu entries.
+
 ### Command line
 
 | Run | Does |
@@ -127,6 +142,19 @@ The line starting `✅` is the result of the last action (here, `ka` creating a 
 | `.\ssh.ps1 keys` | Open the key window directly (what `kl` does) |
 
 Using an AWS `.pem` key? See [Using an AWS `.pem` key](#using-an-aws-pem-key) for the setup steps and fixes for common errors.
+
+### Files the menu uses
+
+| File | What it is |
+|---|---|
+| `%USERPROFILE%\ssh.ps1` | The script |
+| `%USERPROFILE%\ssh-config-menu` | Your key list and menu entries ([format](#ssh-config-menu)) |
+| `%USERPROFILE%\ssh-config-menu.bak.1` … `.bak.10` | The last 10 versions of `ssh-config-menu`, newest first, made before each change from the menu ([Backups and REVERT](#backups-and-revert)) |
+| `%USERPROFILE%\ssh-config-menu.scp` | The last copy (`c`) and push (`p`) paths used for each host ([Copying files](#copying-files-from-a-host-scp)) |
+| `%USERPROFILE%\.ssh\` | Your keys (or the folder set on the `.ssh = ` line) |
+| `%USERPROFILE%\.ssh\deleted\<date_time>\` | Keys deleted from the key window, moved rather than erased |
+
+The menu creates the backups, `ssh-config-menu.scp` and the `deleted` folders when they're first needed. You can delete any of those at any time.
 
 ## ssh-config-menu
   
@@ -460,6 +488,8 @@ ssh -v -i "$env:USERPROFILE\.ssh\aws-prod.pem" ec2-user@<host>
 ## Installation
 
 Download and copy both the script "ssh.ps1" and skeleton "ssh-config-menu" to your %USERPROFILE% folder.
+If PowerShell refuses to run the downloaded script, unblock it once with `Unblock-File $env:USERPROFILE\ssh.ps1`.
+To update later, download `ssh.ps1` again and replace the old one: your `ssh-config-menu`, backups and scp history are separate files and are kept.
 Edit the first line .ssh, location definition is your are going non windows standard
 Replace the lines two and three with your "private keys"
 Remove my host line examples and define your own
