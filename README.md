@@ -336,11 +336,11 @@ You're then back at the menu, with the copy and the scp command shown under it.
 - The folder is created if it doesn't exist.
 - Files with the same name are overwritten.
 
-**Remembered values** are stored per `user@host` in `%USERPROFILE%\ssh-config-menu.scp`, one line per host (`user@host#source#destination`). They're saved even when a copy fails, so you can correct a typo and try again. Delete the file to forget them all.
+**Remembered values** are stored per `user@host` in `%USERPROFILE%\ssh-config-menu.scp`, one line per host (`user@host#source#destination`). Any `#` in a path is stored as `%23` and `%` as `%25`, so they can't break the line format. They're saved even when a copy fails, so you can correct a typo and try again. Delete the file to forget them all.
 
 **Notes:**
 - It signs in with the entry's key, like connecting does. A password or passphrase prompt appears in the menu window.
-- Paths can't contain spaces or `#`.
+- Paths can contain spaces, `#`, quotes and brackets. Type them plainly, without quotes or backslashes. For the source, the menu escapes them for the server itself, leaving `*`, `?` and `[ ]` working as wildcards.
 - If scp reports an error (e.g. no files matched the wildcard), the menu pauses so you can read it.
 
 ## Using an AWS `.pem` key

@@ -796,7 +796,22 @@ if ($KeyMode) {
 # --- Copy files from a host with scp (main menu <n>c) ---
 # The last source and destination used for each user@host are remembered in
 # ssh-config-menu.scp, one line per host:  user@host#source#destination
+# '#' and '%' inside the paths are stored URL-style as %23 and %25, so paths
+# can contain them (and spaces) without breaking the line format.
 $ScpHistoryFile = "$ConfigFile.scp"
+
+function ConvertTo-HistoryField   { param($t) return (($t -replace '%', '%25') -replace '#', '%23') }
+function ConvertFrom-HistoryField { param($t) return (($t -replace '%23', '#') -replace '%25', '%') }
+
+# Escape a remote path for scp: backslash before anything that isn't a plain
+# path character, so spaces, '#', quotes etc. reach the server literally.
+# Both of scp's modes (old remote-shell and newer SFTP) understand this.
+# Wildcards * ? [ ] are left alone so they still match, and ~ so it still
+# means the home folder.
+function ConvertTo-ScpRemotePath {
+    param($path)
+    return ($path -replace '([^A-Za-z0-9._/~*?\[\]+,=:@%^-])', '\$1')
+}
 
 function Get-DownloadsFolder {
     # The real Downloads folder, even if it has been moved (e.g. to OneDrive).
@@ -828,7 +843,7 @@ function Get-ScpHistory {
         foreach ($l in @(Get-Content -LiteralPath $ScpHistoryFile)) {
             $parts = $l -split '#'
             if ($parts.Count -eq 3 -and $parts[0] -eq $target) {
-                return @{ Source = $parts[1]; Destination = $parts[2] }
+                return @{ Source = (ConvertFrom-HistoryField $parts[1]); Destination = (ConvertFrom-HistoryField $parts[2]) }
             }
         }
     }
@@ -843,7 +858,7 @@ function Save-ScpHistory {
             if (($l -split '#')[0] -ne $target) { $out += $l }
         }
     }
-    $out += "$target#$source#$destination"
+    $out += "$target#$(ConvertTo-HistoryField $source)#$(ConvertTo-HistoryField $destination)"
     Set-Content -LiteralPath $ScpHistoryFile -Value $out
 }
 
@@ -854,14 +869,6 @@ function Read-PathField {
         if ($answer -eq "") { $answer = $default }
         if ($answer -eq "") {
             Write-Host "    ❌ $label is required. $hint" -ForegroundColor Red
-            continue
-        }
-        if ($answer -match '#') {
-            Write-Host "    ❌ '#' isn't allowed." -ForegroundColor Red
-            continue
-        }
-        if ($answer -match '\s') {
-            Write-Host "    ❌ Spaces aren't supported in the path." -ForegroundColor Red
             continue
         }
         return $answer
@@ -904,7 +911,7 @@ function Copy-FromHost {
     # No trailing \ on the folder: with a space in the path, Windows PowerShell
     # quotes it and \" would be read as an escaped quote. The folder exists, so
     # scp copies into it.
-    $scpArgs += @("$($target):$source", $localDir)
+    $scpArgs += @("$($target):$(ConvertTo-ScpRemotePath $source)", $localDir)
     $cmdText = "scp " + (($scpArgs | ForEach-Object { if ($_ -match '\s') { "`"$_`"" } else { $_ } }) -join ' ')
 
     Write-Host "`n  Running: $cmdText`n" -ForegroundColor DarkGray
