@@ -40,7 +40,7 @@ Then brings up the following:
 [4] mark@bluebottle (bluebottle) [key: id_ecdsa_2024-04-17]
 [5] Configure SSH Menu (edit config file)
 
-After a number:  e edit   + insert above   - insert below   d delete
+After a number:  e edit   + insert above   - insert below   d delete   c copy files
                   < up   > down   , top   . bottom   i install a key on this host
 On its own:       x exit   REVERT undo last change   ka add key   kl list keys
 
@@ -63,6 +63,7 @@ Enter the number of your choice:
 | `6.` | Move entry 6 to the bottom | [Managing entries](#managing-entries-from-the-menu) |
 | `6d` | Delete entry 6 (type `YES` in capitals to confirm) | [Managing entries](#managing-entries-from-the-menu) |
 | `6i` | Install one of your public keys on entry 6's host | [Installing a public key](#installing-a-public-key-on-a-host) |
+| `6c` | Copy files from entry 6's host to this PC (scp) | [Copying files](#copying-files-from-a-host-scp) |
 | *Configure number* | Open `ssh-config-menu` in Notepad (the number straight after the last entry, `[5]` above) | |
 | `REVERT` | Undo the last change to `ssh-config-menu` (again to go further back) | [Backups and REVERT](#backups-and-revert) |
 | `ka` | Create a new key pair | [Managing SSH keys](#managing-ssh-keys-ka-and-kl) |
@@ -283,6 +284,64 @@ What happens:
 3. It tests signing in with the new key on its own. If that works and the menu entry uses a different key, it offers to switch the entry to the new key (with a backup, so `REVERT` works).
 
 This is the Windows equivalent of Linux's `ssh-copy-id`. The server needs a `sh`-compatible shell (bash, sh, ksh, zsh).
+
+### Copying files from a host (scp)
+
+`6c` copies files **from** entry 6's host **to** this PC. It asks for a source and a destination. Each is pre-filled with what you last used for that host, so repeating a copy is just Enter, Enter:
+
+```
+Enter the number of your choice: 6c
+
+📥 Copy files from [6] cane@mdp to this PC  (press Enter to accept the value shown)
+   Source on the host: a file, a wildcard, or a folder ending in /
+     /home/user/thefile.txt    /home/user/*2026-11-01.log    /home/user/*    /home/user/logs/
+   Destination: Downloads/... is your Downloads folder; other paths are relative to C:\Users\you
+
+  Source       [/home/cane/*2026-11-01.log]:
+  Destination  [Downloads/wiresharks/.]:
+
+  Running: scp -i C:\Users\you\.ssh\id_ecdsa_btop_2024-04-17 cane@mdp:/home/cane/*2026-11-01.log C:\Users\you\Downloads\wiresharks
+
+app_2026-11-01.log                       100%   48KB   1.2MB/s   00:00
+db_2026-11-01.log                        100%  210KB   2.8MB/s   00:00
+
+Open C:\Users\you\Downloads\wiresharks in Explorer? (y/N):
+```
+
+You're then back at the menu, with the copy and the scp command shown under it.
+
+**Source** (on the host):
+
+| Type | Copies |
+|---|---|
+| `/home/user/thefile.txt` | That one file |
+| `/home/user/*2026-11-01.log` | Every file matching the wildcard |
+| `/home/user/*` | Every file in the folder; subfolders are skipped |
+| `/home/user/logs/` | The whole `logs` folder, including subfolders (a trailing `/` copies recursively) |
+
+`~/` works for your home folder on the host. The first time you copy from a host, the source defaults to the entry's start folder followed by `/*`, if the entry has one.
+
+**Destination** (on this PC):
+
+| Type | Goes to |
+|---|---|
+| `Downloads/.` | Your Downloads folder (the default the first time) |
+| `Downloads/wiresharks/.` | `wiresharks` inside your Downloads folder |
+| `projects/logs` | `C:\Users\you\projects\logs` (other relative paths are relative to your profile folder) |
+| `C:\temp\logs` | That exact folder |
+
+- `Downloads` means your real Downloads folder, looked up from Windows, so it's still right if it has been moved (e.g. to OneDrive).
+- The trailing `/.` ("into this folder") is optional.
+- `/` and `\` both work.
+- The folder is created if it doesn't exist.
+- Files with the same name are overwritten.
+
+**Remembered values** are stored per `user@host` in `%USERPROFILE%\ssh-config-menu.scp`, one line per host (`user@host#source#destination`). They're saved even when a copy fails, so you can correct a typo and try again. Delete the file to forget them all.
+
+**Notes:**
+- It signs in with the entry's key, like connecting does. A password or passphrase prompt appears in the menu window.
+- Paths can't contain spaces or `#`.
+- If scp reports an error (e.g. no files matched the wildcard), the menu pauses so you can read it.
 
 ## Using an AWS `.pem` key
 

@@ -793,6 +793,138 @@ if ($KeyMode) {
     exit
 }
 
+# --- Copy files from a host with scp (main menu <n>c) ---
+# The last source and destination used for each user@host are remembered in
+# ssh-config-menu.scp, one line per host:  user@host#source#destination
+$ScpHistoryFile = "$ConfigFile.scp"
+
+function Get-DownloadsFolder {
+    # The real Downloads folder, even if it has been moved (e.g. to OneDrive).
+    try {
+        $folders = Get-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders" -ErrorAction Stop
+        $path = $folders.'{374DE290-123F-4565-9164-39C4925E467B}'
+        if ($path -and (Test-Path -LiteralPath $path)) { return $path }
+    } catch { }
+    return "$env:USERPROFILE\Downloads"
+}
+
+# "Downloads\..." -> the real Downloads folder; other relative paths are
+# relative to the user profile; full paths (C:\..., \\server\...) are kept.
+function Resolve-LocalDestination {
+    param($dest)
+    $d = $dest -replace '/', '\'
+    $d = $d -replace '\\\.$', ''          # "folder\." means "into folder"
+    if ($d -match '^(?i)downloads(\\|$)') {
+        $d = (Get-DownloadsFolder) + $d.Substring(9)
+    } elseif ($d -notmatch '^[A-Za-z]:' -and $d -notmatch '^\\\\') {
+        $d = "$env:USERPROFILE\$d"
+    }
+    return $d.TrimEnd('\')
+}
+
+function Get-ScpHistory {
+    param($target)
+    if (Test-Path -LiteralPath $ScpHistoryFile) {
+        foreach ($l in @(Get-Content -LiteralPath $ScpHistoryFile)) {
+            $parts = $l -split '#'
+            if ($parts.Count -eq 3 -and $parts[0] -eq $target) {
+                return @{ Source = $parts[1]; Destination = $parts[2] }
+            }
+        }
+    }
+    return $null
+}
+
+function Save-ScpHistory {
+    param($target, $source, $destination)
+    $out = @()
+    if (Test-Path -LiteralPath $ScpHistoryFile) {
+        foreach ($l in @(Get-Content -LiteralPath $ScpHistoryFile)) {
+            if (($l -split '#')[0] -ne $target) { $out += $l }
+        }
+    }
+    $out += "$target#$source#$destination"
+    Set-Content -LiteralPath $ScpHistoryFile -Value $out
+}
+
+function Read-PathField {
+    param($label, $default, $hint)
+    while ($true) {
+        $answer = (Read-Host ("  {0,-12} [{1}]" -f $label, $default)).Trim()
+        if ($answer -eq "") { $answer = $default }
+        if ($answer -eq "") {
+            Write-Host "    ❌ $label is required. $hint" -ForegroundColor Red
+            continue
+        }
+        if ($answer -match '#') {
+            Write-Host "    ❌ '#' isn't allowed." -ForegroundColor Red
+            continue
+        }
+        if ($answer -match '\s') {
+            Write-Host "    ❌ Spaces aren't supported in the path." -ForegroundColor Red
+            continue
+        }
+        return $answer
+    }
+}
+
+function Copy-FromHost {
+    param($index, $entry)
+    $target = "$($entry.Username)@$($entry.Host)"
+    $last = Get-ScpHistory $target
+
+    # Defaults: last used for this host; otherwise the entry's start folder
+    # (or the home folder) and Downloads.
+    if ($last) {
+        $defSource = $last.Source
+        $defDest = $last.Destination
+    } else {
+        $defSource = if ($entry.Folder) { ($entry.Folder.TrimEnd('/')) + "/*" } else { "" }
+        $defDest = "Downloads/."
+    }
+
+    Write-Host "`n📥 Copy files from [$index] $target to this PC  (press Enter to accept the value shown)" -ForegroundColor Cyan
+    Write-Host "   Source on the host: a file, a wildcard, or a folder ending in /" -ForegroundColor DarkGray
+    Write-Host "     /home/user/thefile.txt    /home/user/*2026-11-01.log    /home/user/*    /home/user/logs/" -ForegroundColor DarkGray
+    Write-Host "   Destination: Downloads/... is your Downloads folder; other paths are relative to $env:USERPROFILE`n" -ForegroundColor DarkGray
+
+    $source = Read-PathField "Source" $defSource "e.g. /home/user/*.log"
+    $dest = Read-PathField "Destination" $defDest "e.g. Downloads/."
+    $localDir = Resolve-LocalDestination $dest
+
+    if (-not (Test-Path -LiteralPath $localDir)) {
+        New-Item -ItemType Directory -Path $localDir -Force | Out-Null
+        Write-Host "  📁 Created $localDir"
+    }
+
+    # A source ending in / copies the whole folder (recursive). A wildcard
+    # copies matching files only; folders it matches are skipped by scp.
+    $scpArgs = @("-i", $entry.KeyPath)
+    if ($source.EndsWith("/")) { $scpArgs += "-r" }
+    # No trailing \ on the folder: with a space in the path, Windows PowerShell
+    # quotes it and \" would be read as an escaped quote. The folder exists, so
+    # scp copies into it.
+    $scpArgs += @("$($target):$source", $localDir)
+    $cmdText = "scp " + (($scpArgs | ForEach-Object { if ($_ -match '\s') { "`"$_`"" } else { $_ } }) -join ' ')
+
+    Write-Host "`n  Running: $cmdText`n" -ForegroundColor DarkGray
+    & scp @scpArgs
+    $code = $LASTEXITCODE
+
+    Save-ScpHistory $target $source $dest
+
+    if ($code -ne 0) {
+        Write-Host "`nPress Enter to continue..."
+        [void](Read-Host)
+        Set-Status "❌ scp reported a problem (exit code $code). See its messages above.`nRunning: $cmdText" Red
+        return
+    }
+    if (Confirm-YesNo "Open $localDir in Explorer? (y/N)") {
+        Start-Process explorer.exe $localDir
+    }
+    Set-Status "📥 Copied $($target):$source to $localDir`nRunning: $cmdText" Cyan
+}
+
 # --- Main menu loop ---
 do {
     Clear-Host
@@ -813,7 +945,7 @@ do {
         Write-Host ("[{0}] {1} ({2}) [key: {3}]" -f $i, $target, $entry.Alias, $entry.Keyname)
     }
     Write-Host ("[{0}] Configure SSH Menu (edit config file)" -f $configIndex)
-    Write-Host "`nAfter a number:  e edit   + insert above   - insert below   d delete" -ForegroundColor DarkGray
+    Write-Host "`nAfter a number:  e edit   + insert above   - insert below   d delete   c copy files" -ForegroundColor DarkGray
     Write-Host "                  < up   > down   , top   . bottom   i install a key on this host" -ForegroundColor DarkGray
     Write-Host "On its own:       x exit   REVERT undo last change   ka add key   kl list keys" -ForegroundColor DarkGray
     if ($StatusText) {
@@ -837,7 +969,7 @@ do {
             $action = "revert"
             $isValid = $true
         }
-        elseif ($choiceRaw -match '^(\d+)([e+\-<>,.di])$') {
+        elseif ($choiceRaw -match '^(\d+)([e+\-<>,.dic])$') {
             $action = $Matches[2].ToLower()
             $choiceRaw = $Matches[1]
             $n = [int]$choiceRaw
@@ -887,6 +1019,7 @@ do {
                 "-"      { Insert-Entry $choice $entry -Below }
                 "d"      { Remove-Entry $choice $entry }
                 "i"      { Install-ChosenKeyOnHost $choice $entry }
+                "c"      { Copy-FromHost $choice $entry }
                 "<"      { Move-Entry $choice ($choice - 1) }
                 ">"      { Move-Entry $choice ($choice + 1) }
                 ","      { Move-Entry $choice 0 }
