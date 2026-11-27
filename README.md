@@ -1,4 +1,4 @@
-# windows-ssh
+# windows-ssh aka [ SSH Quick Connect Menu ]
 Powershell menu system for managing ssh connections in a corporate environment not requiring administrator access with scp built in. Putty not required.
 
 ## windows-ssh
